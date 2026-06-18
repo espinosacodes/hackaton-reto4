@@ -1,0 +1,80 @@
+
+HACKATHON LEGAL HACK ICESI 2026
+Enunciado Oficial de Retos
+
+Hurtado Gandini Abogados S.A.S.
+Dirección académica: Juan Fernando Arenas Jaramillo
+Jueves 19 de junio de 2026 entregado a las 10:00 horas
+
+Instrucciones generales
+Este documento contiene los cuatro retos oficiales del Legal Hack Icesi 2026. Cada reto corresponde a un caso de uso real de inteligencia artificial identificado por Hurtado Gandini Abogados en su práctica. No son ejercicios teóricos: son problemas que la firma enfrenta hoy.
+Los retos se distribuyen en dos áreas de práctica:
+–	Litigios y resolución de conflictos: Reto 1 (Litigio Masivo) y Reto 2 (Responsabilidad Civil).
+–	Operación legal y eficiencia interna: Reto 3 (Seguimiento Judicial) y Reto 4 (Laboral & Compliance).
+
+	Asignación de retos
+La organización comunicará al inicio del Día 1 si los retos se asignan por sorteo o si los equipos los eligen libremente.
+Cada equipo trabaja sobre un solo reto durante las tres jornadas.
+No es posible cambiar de reto una vez formalizado el registro del equipo (23:59 del jueves 19 de junio).
+
+Todos los equipos deben entregar los cuatro entregables del Reglamento prototipo, deck, síntesis jurídica y repositorio adaptándolos al reto asignado.
+ RETO 1
+
+RETO 4
+Laboral & Compliance
+Compliance laboral automatizado y gestión de procesos disciplinarios
+4.1 Contexto del problema
+Las empresas clientes de HG con nóminas superiores a 50 trabajadores enfrentan dos problemas recurrentes: el incumplimiento involuntario de obligaciones laborales pagos de seguridad social, vacaciones, primas, liquidaciones por falta de alertas tempranas; y la gestión deficiente de procesos disciplinarios internos, que termina en demandas laborales por violación del debido proceso.
+Hoy la firma presta estos servicios mediante revisiones periódicas manuales de nómina y contratos, y elabora pliegos de cargos y descargos caso por caso. El trabajo es estructuralmente repetitivo, pero depende de la lectura correcta de cada contrato individual para determinar el régimen aplicable.
+
+Área de práctica	Derecho laboral individual y colectivo compliance empresarial
+Cliente tipo	Empresas con 50–500 trabajadores con vínculo laboral directo
+Riesgo principal	Demandas laborales por liquidación incorrecta y nulidad del proceso disciplinario
+Complejidad	Media-alta múltiples tipos de contrato y regímenes de jornada
+Normativa	CST + Ley 2101/2021 + Ley 2466/2025 + circulares Mintrabajo
+
+4.2 Marco normativo relevante
+–	Código Sustantivo del Trabajo (CST): arts. 22–23 (contrato de trabajo), 61 (terminación), 64 (indemnización por despido sin justa causa), 127–128 (salario), 186–192 (vacaciones), 306–307 (prima de servicios) y 249–252 (cesantías).
+–	Ley 2101 de 2021: reducción progresiva de la jornada laboral a 42 horas semanales (en vigor pleno desde 2026).
+–	Ley 2466 de 2025 (trabajo en plataformas digitales): definición de subordinación algorítmica y presunción de vínculo laboral en plataformas de reparto.
+–	Decreto 1072 de 2015 (DUR Laboral): libro 2, parte 2, título 4 (jornadas especiales) y título 6 (proceso disciplinario y comité de convivencia).
+–	Jurisprudencia CSJ Sala Laboral: doctrina sobre el debido proceso disciplinario y la nulidad del despido (SL1706-2024).
+–	Convenios OIT n.º 87, 98 y 158: estándares internacionales sobre libertad sindical y terminación del contrato.
+
+4.3 El reto
+Construir una herramienta de IA que permita a HG ofrecer a sus clientes empresariales un servicio de compliance laboral proactivo y una gestión asistida de procesos disciplinarios. El sistema debe:
+1.	Cargar y analizar contratos laborales individuales para identificar el tipo de vínculo, el régimen de jornada y las obligaciones periódicas del empleador.
+2.	Generar alertas tempranas ante vencimientos de contratos a término fijo, vacaciones vencidas, liquidaciones pendientes y obligaciones de seguridad social.
+3.	Verificar automáticamente la correcta liquidación de prestaciones sociales cesantías, intereses, prima, vacaciones según los parámetros de cada contrato.
+4.	Asistir en la elaboración de pliegos de cargos para procesos disciplinarios, verificando que el procedimiento cumpla con el debido proceso (arts. 29 Constitución y 115 CST).
+5.	Identificar riesgos de reclasificación de contratos civiles o de prestación de servicios que presenten indicios de subordinación laboral.
+
+	Elemento diferenciador: Ley 2466 de 2025
+La Ley 2466 de 2025 introduce el concepto de subordinación algorítmica para trabajadores de plataformas digitales.
+Los equipos que incorporen el análisis de este régimen por ejemplo, para clientes con operaciones de reparto o servicios serán evaluados positivamente en el criterio de impacto y escalabilidad.
+No es obligatorio, pero es una oportunidad de diferenciación.
+
+4.4 Criterios de evaluación específicos
+Aspecto a evaluar	Lo que el jurado quiere ver
+Lectura contractual	¿El sistema identifica correctamente tipo de contrato, jornada y obligaciones?
+Verificación de liquidación	¿El cálculo de prestaciones es correcto según CST y Ley 2101/2021?
+Proceso disciplinario	¿La estructura del pliego de cargos cumple el debido proceso (art. 29 CN)?
+Detección de riesgo laboral	¿El sistema alerta sobre contratos que podrían reclasificarse como laborales?
+Utilidad para el cliente	¿El sistema es accionable para el área de RRHH de la empresa cliente?
+ Nota final para todos los equipos
+Los cuatro retos son casos reales de la práctica de Hurtado Gandini Abogados. El jurado no solo evaluará la solución técnica: evaluará si funcionaría en un entorno jurídico real colombiano.
+Algunas preguntas que el jurado hará en la ronda de evaluación:
+–	¿Por qué escogieron este enfoque técnico y no otro?
+–	¿Qué pasa cuando la IA comete un error? ¿Cómo lo detecta el abogado?
+–	¿Quién responde legalmente si el sistema genera una contestación incorrecta?
+–	¿Cómo se implementaría esto en la firma en 90 días con presupuesto real?
+–	¿Qué normas regulan el uso de IA en la práctica legal en Colombia hoy?
+
+	Para tener en cuenta
+El uso de IA generativa está permitido y es parte del espíritu del evento.
+Una solución simple que resuelve bien el problema vale más que una solución compleja que lo resuelve mal.
+Cualquier duda sobre el enunciado puede plantearse en la sesión de Challenge Highlights a las 17:00 del Día 1.
+
+Enunciado preparado por Juan Fernando Arenas Jaramillo — Dirección Académica, Legal Hack Icesi 2026
+Hurtado Gandini Abogados S.A.S. — Organizador oficial
+
