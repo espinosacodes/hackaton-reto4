@@ -1,13 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { PageHeader } from "@/components/AppShell";
 import { Card, CardHeader, Badge, Button, Progress } from "@/components/ui";
 import { Reveal } from "@/components/motion";
 import { CONTRATOS } from "@/lib/data/contratos";
 import { Contrato } from "@/lib/types";
 import { cop, fmtDate } from "@/lib/utils";
-import { DocumentText, DocumentUpload, Flash, TickCircle, People, Cpu } from "iconsax-react";
+import {
+  ACCEPTED_FILE_TYPES,
+  extractTextFromFile,
+  FileExtractError,
+} from "@/lib/extract-file";
+import { DocumentUpload, Flash, TickCircle, People, Cpu, Document } from "iconsax-react";
 
 const tipoLabel: Record<string, string> = {
   indefinido: "Indefinido",
@@ -35,6 +40,44 @@ export default function ContratosPage() {
   const [texto, setTexto] = useState(EJEMPLO);
   const [cargando, setCargando] = useState(false);
   const [extraccion, setExtraccion] = useState<Record<string, unknown> | null>(null);
+  const [archivo, setArchivo] = useState<string | null>(null);
+  const [leyendo, setLeyendo] = useState(false);
+  const [errArchivo, setErrArchivo] = useState<string | null>(null);
+  const [arrastrando, setArrastrando] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  async function cargarArchivo(file: File) {
+    setErrArchivo(null);
+    setLeyendo(true);
+    try {
+      const t = await extractTextFromFile(file);
+      setTexto(t);
+      setArchivo(file.name);
+      setExtraccion(null);
+    } catch (err) {
+      setArchivo(null);
+      setErrArchivo(
+        err instanceof FileExtractError
+          ? err.message
+          : "No se pudo procesar el archivo.",
+      );
+    } finally {
+      setLeyendo(false);
+    }
+  }
+
+  function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) cargarArchivo(file);
+    e.target.value = ""; // permite recargar el mismo archivo
+  }
+
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setArrastrando(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) cargarArchivo(file);
+  }
 
   async function extraer() {
     setCargando(true);
@@ -76,16 +119,59 @@ export default function ContratosPage() {
             right={<DocumentUpload size={20} color="var(--red)" />}
           />
           <div className="px-5 py-4">
+            {/* Carga de archivo: PDF / DOCX / TXT (lectura en el navegador) */}
+            <input
+              ref={inputRef}
+              type="file"
+              accept={ACCEPTED_FILE_TYPES}
+              onChange={onPickFile}
+              className="hidden"
+            />
+            <div
+              onClick={() => inputRef.current?.click()}
+              onDragOver={(e) => { e.preventDefault(); setArrastrando(true); }}
+              onDragLeave={() => setArrastrando(false)}
+              onDrop={onDrop}
+              className={`mb-3 flex cursor-pointer items-center gap-3 border border-dashed px-4 py-3 text-[12px] transition-colors ${
+                arrastrando ? "border-ink bg-surface-2" : "border-border-2 hover:border-ink"
+              }`}
+              style={{ borderRadius: "var(--radius)" }}
+            >
+              {leyendo ? (
+                <>
+                  <Flash size={18} color="var(--red)" variant="Bold" className="animate-pulse" />
+                  <span className="text-ink-2">Leyendo archivo…</span>
+                </>
+              ) : archivo ? (
+                <>
+                  <Document size={18} color="var(--success)" variant="Bold" />
+                  <span className="text-ink">
+                    <span className="font-medium">{archivo}</span> cargado · texto extraído abajo
+                  </span>
+                </>
+              ) : (
+                <>
+                  <DocumentUpload size={18} color="var(--red)" />
+                  <span className="text-ink-2">
+                    Arrastre o haga clic para subir un <span className="font-medium text-ink">PDF, DOCX o TXT</span>
+                  </span>
+                </>
+              )}
+            </div>
+            {errArchivo && (
+              <p className="mb-3 text-[12px] text-red-dark">{errArchivo}</p>
+            )}
             <textarea
               value={texto}
-              onChange={(e) => setTexto(e.target.value)}
-              rows={11}
+              onChange={(e) => { setTexto(e.target.value); setArchivo(null); }}
+              rows={9}
+              placeholder="…o pegue el texto del contrato aquí."
               className="w-full border border-border-2 bg-surface p-3 font-mono text-[12px] leading-relaxed text-ink focus:border-ink focus:outline-none"
               style={{ borderRadius: "var(--radius)" }}
             />
             <div className="mt-3 flex items-center justify-between">
               <span className="text-[11px] text-ink-3">{texto.length} caracteres</span>
-              <Button variant="primary" onClick={extraer} disabled={cargando}>
+              <Button variant="primary" onClick={extraer} disabled={cargando || leyendo}>
                 <Flash size={15} variant="Bold" />
                 {cargando ? "Analizando…" : "Extraer con IA"}
               </Button>
