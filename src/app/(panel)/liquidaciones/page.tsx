@@ -1,0 +1,241 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { PageHeader } from "@/components/AppShell";
+import { Card, CardHeader, Badge, Button } from "@/components/ui";
+import { Reveal } from "@/components/motion";
+import { CONTRATOS, HOY } from "@/lib/data/contratos";
+import { liquidar, compararLiquidacion, PARAMS_2026 } from "@/lib/liquidacion";
+import { CausaTerminacion } from "@/lib/types";
+import { cop, fmtDate } from "@/lib/utils";
+import { Calculator, TickCircle, CloseCircle, Warning2, InfoCircle } from "iconsax-react";
+
+const CAUSAS: { value: CausaTerminacion; label: string }[] = [
+  { value: "sin_justa_causa", label: "Despido sin justa causa" },
+  { value: "justa_causa", label: "Despido con justa causa" },
+  { value: "renuncia", label: "Renuncia voluntaria" },
+  { value: "vencimiento_plazo", label: "Vencimiento del plazo" },
+  { value: "mutuo_acuerdo", label: "Mutuo acuerdo" },
+];
+
+export default function LiquidacionesPage() {
+  const [id, setId] = useState(CONTRATOS[0].id);
+  const [causa, setCausa] = useState<CausaTerminacion>("sin_justa_causa");
+  const [hasta, setHasta] = useState(HOY);
+  const [pagado, setPagado] = useState<string>("");
+
+  const contrato = CONTRATOS.find((c) => c.id === id)!;
+  const liq = useMemo(() => liquidar(contrato, hasta, causa), [contrato, hasta, causa]);
+
+  const comparacion =
+    pagado.trim() !== "" ? compararLiquidacion(liq.total, Number(pagado.replace(/\D/g, ""))) : null;
+
+  return (
+    <div className="mx-auto max-w-6xl">
+      <PageHeader
+        overline="Verificación de prestaciones sociales"
+        title="Liquidador auditable"
+        subtitle="Cálculo 100% determinista —sin IA en la aritmética— de cesantías, intereses, prima, vacaciones e indemnización (CST + Ley 2101/2021). Cada línea muestra su fórmula y su norma para que el abogado la verifique."
+      />
+
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+        {/* Controls */}
+        <div className="lg:col-span-1">
+          <Card>
+            <CardHeader overline="Parámetros" title="Caso a liquidar" />
+            <div className="space-y-4 px-5 py-4">
+              <Field label="Empleado / contrato">
+                <select
+                  value={id}
+                  onChange={(e) => setId(e.target.value)}
+                  className="input"
+                >
+                  {CONTRATOS.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.empleado} — {c.id}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Causa de terminación">
+                <select
+                  value={causa}
+                  onChange={(e) => setCausa(e.target.value as CausaTerminacion)}
+                  className="input"
+                >
+                  {CAUSAS.map((c) => (
+                    <option key={c.value} value={c.value}>
+                      {c.label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Fecha de retiro">
+                <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className="input" />
+              </Field>
+
+              <div className="hairline bg-surface-2 px-3 py-3 text-[12px] text-ink-2">
+                <Row k="Tipo de contrato" v={tipoLabel(contrato.tipo)} />
+                <Row k="Salario mensual" v={cop(contrato.salarioMensual)} />
+                <Row k="Auxilio transporte" v={contrato.auxilioTransporte ? "Sí" : "No"} />
+                <Row k="Salario integral" v={contrato.salarioIntegral ? "Sí" : "No"} />
+                <Row k="Ingreso" v={fmtDate(contrato.fechaInicio)} />
+                <Row k="Días laborados (360)" v={String(liq.diasLaborados)} />
+              </div>
+
+              <div className="border-t border-border pt-3">
+                <Field label="Valor liquidado por la empresa (opcional)">
+                  <input
+                    inputMode="numeric"
+                    placeholder="Ej: 14.000.000"
+                    value={pagado}
+                    onChange={(e) => setPagado(e.target.value)}
+                    className="input font-num"
+                  />
+                </Field>
+                <p className="mt-1.5 text-[11px] text-ink-3">
+                  Compara el pago real contra el cálculo de referencia para detectar sub o sobre-liquidaciones.
+                </p>
+              </div>
+            </div>
+          </Card>
+
+          <div className="mt-3 hairline flex items-start gap-2 bg-[var(--info-tint)] px-4 py-3">
+            <InfoCircle size={16} color="var(--info)" className="mt-0.5 shrink-0" />
+            <p className="text-[12px] leading-snug text-ink-2">
+              Parámetros {PARAMS_2026.anio}: SMMLV {cop(PARAMS_2026.smmlv)} · auxilio {cop(PARAMS_2026.auxilioTransporte)} (Decretos 1469/1470 de 2025).
+            </p>
+          </div>
+        </div>
+
+        {/* Result */}
+        <div className="lg:col-span-2">
+          <Reveal key={id + causa + hasta}>
+            <Card>
+              <CardHeader
+                overline="Resultado"
+                title={`Liquidación — ${contrato.empleado}`}
+                subtitle={`${fmtDate(liq.desde)} → ${fmtDate(liq.hasta)} · ${CAUSAS.find((c) => c.value === causa)?.label}`}
+                right={<Calculator size={22} color="var(--red)" variant="Bulk" />}
+              />
+
+              <div className="divide-y divide-border">
+                {liq.lineas.map((l) => (
+                  <div key={l.concepto} className="px-5 py-3.5">
+                    <div className="flex items-baseline justify-between gap-4">
+                      <span className="text-[14px] font-medium text-ink">{l.concepto}</span>
+                      <span className="font-num text-[15px] text-ink">{cop(l.valor)}</span>
+                    </div>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-ink-2">
+                      <span className="font-num bg-surface-2 px-1.5 py-0.5">{l.formula}</span>
+                      <span className="text-ink-3">{l.base}</span>
+                      <Badge tone="neutral" className="ml-auto">{l.norma}</Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex items-center justify-between border-t-2 border-border-strong bg-surface-2 px-5 py-4">
+                <span className="font-head text-[15px] text-ink">Total liquidación</span>
+                <span className="font-num text-[24px] text-ink">{cop(liq.total)}</span>
+              </div>
+
+              {liq.notas.length > 0 && (
+                <div className="space-y-1.5 px-5 py-3">
+                  {liq.notas.map((n, i) => (
+                    <p key={i} className="flex items-start gap-2 text-[12px] text-ink-2">
+                      <InfoCircle size={14} className="mt-0.5 shrink-0 text-ink-3" /> {n}
+                    </p>
+                  ))}
+                </div>
+              )}
+            </Card>
+          </Reveal>
+
+          {/* Comparison verdict */}
+          {comparacion && (
+            <Reveal key={pagado}>
+              <div className="mt-3">
+                <VerdictCard estado={comparacion.estado} diferencia={comparacion.diferencia} pct={comparacion.pct} />
+              </div>
+            </Reveal>
+          )}
+
+          <div className="mt-3 flex justify-end gap-2">
+            <Button variant="secondary">Exportar PDF</Button>
+            <Button variant="primary">Enviar a revisión del abogado</Button>
+          </div>
+        </div>
+      </div>
+
+      <style jsx global>{`
+        .input {
+          width: 100%;
+          border: 1px solid var(--border-2);
+          background: var(--surface);
+          padding: 8px 10px;
+          font-size: 13px;
+          color: var(--ink);
+          border-radius: var(--radius);
+        }
+        .input:focus {
+          outline: none;
+          border-color: var(--ink);
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function VerdictCard({ estado, diferencia, pct }: { estado: string; diferencia: number; pct: number }) {
+  const map = {
+    correcta: { tone: "success" as const, icon: TickCircle, color: "var(--success)", title: "Liquidación correcta", msg: "El valor pagado coincide con el cálculo de referencia (diferencia < 1%)." },
+    subliquidada: { tone: "red" as const, icon: CloseCircle, color: "var(--red)", title: "Subliquidación detectada", msg: "El pago es inferior al cálculo legal. Riesgo de reclamación y sanción por pago incompleto." },
+    sobreliquidada: { tone: "warning" as const, icon: Warning2, color: "var(--warning)", title: "Sobreliquidación detectada", msg: "El pago supera el cálculo de referencia. Verifique conceptos adicionales o error de cálculo." },
+  }[estado as "correcta" | "subliquidada" | "sobreliquidada"];
+  const Icon = map.icon;
+  return (
+    <Card className="overflow-hidden">
+      <div className="flex items-start gap-3 px-5 py-4" style={{ background: estado === "correcta" ? "var(--success-tint)" : estado === "subliquidada" ? "var(--red-tint)" : "var(--warning-tint)" }}>
+        <Icon size={26} color={map.color} variant="Bold" className="mt-0.5 shrink-0" />
+        <div className="flex-1">
+          <div className="flex items-center gap-2">
+            <h3 className="font-head text-[15px]" style={{ color: map.color }}>{map.title}</h3>
+            <Badge tone={map.tone}>{pct >= 0 ? "+" : ""}{pct.toFixed(1)}%</Badge>
+          </div>
+          <p className="mt-1 text-[13px] text-ink-2">{map.msg}</p>
+          <p className="font-num mt-2 text-[14px] text-ink">
+            Diferencia: {cop(Math.abs(diferencia))} {diferencia < 0 ? "a favor del trabajador" : "a favor de la empresa"}
+          </p>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <span className="overline mb-1.5 block">{label}</span>
+      {children}
+    </label>
+  );
+}
+function Row({ k, v }: { k: string; v: string }) {
+  return (
+    <div className="flex justify-between py-0.5">
+      <span className="text-ink-3">{k}</span>
+      <span className="font-num text-ink">{v}</span>
+    </div>
+  );
+}
+function tipoLabel(t: string) {
+  return {
+    indefinido: "Término indefinido",
+    fijo: "Término fijo",
+    obra_labor: "Obra o labor",
+    prestacion_servicios: "Prestación de servicios",
+    aprendizaje: "Aprendizaje",
+    plataforma: "Plataforma digital",
+  }[t] ?? t;
+}

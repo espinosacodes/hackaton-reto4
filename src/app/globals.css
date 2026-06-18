@@ -1,0 +1,162 @@
+@import "tailwindcss";
+
+/*
+  CENTINELA — Design system
+  Base: ThoughtStream (editorial / zen: serif display, hairline borders, sharp edges, no shadows)
+  Rebrand: Hurtado Gandini — black + legal red.
+*/
+
+:root {
+  /* Surfaces */
+  --bg: #fafaf9; /* paper */
+  --surface: #ffffff;
+  --surface-2: #f5f5f4;
+  --surface-inset: #efedeb;
+
+  /* Ink (content) */
+  --ink: #1c1917;
+  --ink-2: #57534e;
+  --ink-3: #a8a29e;
+
+  /* Borders — hairline, replace shadows */
+  --border: #e7e5e4;
+  --border-2: #d6d3d1;
+  --border-strong: #1c1917;
+
+  /* Brand — HG black + legal red */
+  --black: #0a0a0a;
+  --red: #c8102e; /* legal red */
+  --red-dark: #9b0c23;
+  --red-tint: #fdecef;
+
+  /* Semantic */
+  --success: #2f7d32;
+  --success-tint: #eef6ee;
+  --warning: #b45309;
+  --warning-tint: #fdf3e7;
+  --danger: #c8102e;
+  --danger-tint: #fdecef;
+  --info: #1d4ed8;
+  --info-tint: #eaf0fd;
+
+  --radius: 2px; /* sharp edges */
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-inset: var(--surface-inset);
+
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+
+  --color-border: var(--border);
+  --color-border-2: var(--border-2);
+  --color-border-strong: var(--border-strong);
+
+  --color-black: var(--black);
+  --color-red: var(--red);
+  --color-red-dark: var(--red-dark);
+  --color-red-tint: var(--red-tint);
+
+  --color-success: var(--success);
+  --color-success-tint: var(--success-tint);
+  --color-warning: var(--warning);
+  --color-warning-tint: var(--warning-tint);
+  --color-danger: var(--danger);
+  --color-danger-tint: var(--danger-tint);
+  --color-info: var(--info);
+  --color-info-tint: var(--info-tint);
+
+  --font-serif: var(--font-serif);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+
+  --radius-sharp: 2px;
+}
+
+* {
+  border-color: var(--border);
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans), Inter, system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+/* Typographic scale (ThoughtStream) */
+.font-display {
+  font-family: var(--font-serif), "Libre Baskerville", Georgia, serif;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.font-head {
+  font-family: var(--font-serif), "Libre Baskerville", Georgia, serif;
+  font-weight: 700;
+}
+.font-subhead {
+  font-family: var(--font-serif), "Libre Baskerville", Georgia, serif;
+  font-weight: 400;
+}
+.font-num {
+  font-family: var(--font-mono), "Source Code Pro", monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.overline {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+/* Hairline utility */
+.hairline {
+  border: 1px solid var(--border);
+}
+
+/* Selection */
+::selection {
+  background: var(--red);
+  color: #fff;
+}
+
+/* Thin scrollbars */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-2);
+  border: 3px solid var(--bg);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ink-3);
+}
+
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(200, 16, 46, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(200, 16, 46, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(200, 16, 46, 0);
+  }
+}
+.pulse-red {
+  animation: pulse-ring 2s infinite;
+}
