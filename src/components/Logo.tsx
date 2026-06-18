@@ -1,6 +1,7 @@
+import Image from "next/image";
 import { cn } from "@/lib/utils";
 
-/** Centinela wordmark — HG black + legal red. */
+/** Centinela lockup — official Hurtado Gandini logo + product name. */
 export function Logo({
   className,
   compact = false,
@@ -9,10 +10,10 @@ export function Logo({
   compact?: boolean;
 }) {
   return (
-    <div className={cn("flex items-center gap-2.5 select-none", className)}>
+    <div className={cn("flex items-center gap-3 select-none", className)}>
       <Mark />
       {!compact && (
-        <div className="leading-none">
+        <div className="border-l border-border pl-3 leading-none">
           <div className="font-head text-[17px] tracking-tight text-ink">
             Centinela
           </div>
@@ -25,23 +26,21 @@ export function Logo({
   );
 }
 
-export function Mark({ size = 30 }: { size?: number }) {
+/** HG brand mark — official wordmark (white) on a black plate. */
+export function Mark({ size = 32 }: { size?: number }) {
   return (
     <div
-      className="relative flex items-center justify-center bg-black"
-      style={{ width: size, height: size, borderRadius: "var(--radius)" }}
+      className="flex items-center justify-center bg-black px-2.5"
+      style={{ height: size, borderRadius: "var(--radius)" }}
     >
-      <span className="font-head text-[14px] font-bold leading-none text-white">
-        H
-      </span>
-      {/* Red sentinel slash */}
-      <span
-        className="absolute bottom-0 right-0"
-        style={{
-          width: size * 0.32,
-          height: 3,
-          background: "var(--red)",
-        }}
+      <Image
+        src="/logo-hg.webp"
+        alt="Hurtado Gandini"
+        width={1736}
+        height={418}
+        priority
+        className="w-auto object-contain"
+        style={{ height: size * 0.5 }}
       />
     </div>
   );

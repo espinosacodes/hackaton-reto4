@@ -15,7 +15,7 @@ export default function ReclasificacionPage() {
   const resultados = candidatos.map(evaluarReclasificacion);
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="mx-auto w-full max-w-5xl 2xl:max-w-6xl">
       <PageHeader
         overline="Detección de riesgo laboral"
         title="Test de reclasificación de contratos"

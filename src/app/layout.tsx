@@ -25,6 +25,13 @@ export const metadata: Metadata = {
   title: "Centinela — Compliance Laboral · Hurtado Gandini",
   description:
     "Compliance laboral proactivo y gestión asistida de procesos disciplinarios. Lectura contractual, verificación de liquidaciones y detección de riesgo de reclasificación (Ley 2466/2025).",
+  icons: {
+    icon: [
+      { url: "/favicon-hg-32.webp", sizes: "32x32", type: "image/webp" },
+      { url: "/favicon-hg-192.webp", sizes: "192x192", type: "image/webp" },
+    ],
+    apple: [{ url: "/apple-icon-hg.webp" }],
+  },
 };
 
 export default function RootLayout({

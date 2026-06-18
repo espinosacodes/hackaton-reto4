@@ -16,10 +16,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const criticas = alertas.filter((a) => a.severidad === "critica").length;
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex h-screen overflow-hidden">
       {/* Sidebar */}
-      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-border bg-surface lg:flex">
-        <div className="border-b border-border px-5 py-4">
+      <aside className="hidden h-screen w-64 shrink-0 flex-col border-r border-border bg-surface lg:flex">
+        <div className="flex h-16 shrink-0 items-center border-b border-border px-5">
           <Logo />
         </div>
         <nav className="flex-1 px-3 py-4">
@@ -64,8 +64,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Main */}
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-20 flex items-center gap-4 border-b border-border bg-bg/85 px-6 py-3 backdrop-blur">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <header className="z-20 flex h-16 shrink-0 items-center gap-4 border-b border-border bg-bg/85 px-6 backdrop-blur">
           <div className="hairline hidden items-center gap-2 bg-surface px-3 py-1.5 text-[13px] text-ink-3 md:flex md:w-72">
             <SearchNormal1 size={15} />
             <span>Buscar empleado, contrato…</span>
@@ -86,7 +86,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         </header>
-        <main className="flex-1 px-6 py-7">{children}</main>
+        <main className="flex-1 overflow-y-auto px-6 py-7">{children}</main>
       </div>
     </div>
   );

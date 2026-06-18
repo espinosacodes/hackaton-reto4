@@ -59,27 +59,42 @@ hairline, sin sombras) re-marcado a **Hurtado Gandini: negro + rojo**.
 
 ```bash
 npm install
-cp .env.example .env.local   # opcional: añade ANTHROPIC_API_KEY para IA real
+cp .env.example .env.local   # opcional: añade la API key de tu proveedor
 npm run dev                  # http://localhost:3000
 ```
 
-Sin `ANTHROPIC_API_KEY`, la extracción de contratos funciona en **modo demo** (heurística local).
-Con la clave, usa el modelo de IA (`CENTINELA_EXTRACT_MODEL`, por defecto Haiku 4.5).
+Sin proveedor configurado, la extracción de contratos funciona en **modo demo** (heurística local).
+
+### Proveedor de IA (multi-proveedor / costo-efectivo)
+La extracción soporta **Claude, OpenAI, DeepSeek o Gemini** — define **solo** la API key del que uses.
+Por defecto se elige automáticamente el primero con clave; o fuerza con `LLM_PROVIDER`.
+
+| Proveedor | Variable | Modelo por defecto (el más barato) |
+|-----------|----------|-----------------------------------|
+| Claude | `ANTHROPIC_API_KEY` | `claude-haiku-4-5` |
+| OpenAI | `OPENAI_API_KEY` | `gpt-4o-mini` |
+| **DeepSeek** (más costo-efectivo) | `DEEPSEEK_API_KEY` | `deepseek-chat` |
+| Gemini | `GEMINI_API_KEY` | `gemini-2.0-flash` |
+
+`LLM_PROVIDER` (opcional) = `anthropic`｜`openai`｜`deepseek`｜`gemini`.
+`CENTINELA_EXTRACT_MODEL` (opcional) sobrescribe el modelo.
 
 ## Desplegar (Vercel)
 
-El módulo de contratos usa una **ruta de servidor** (`/api/extract`) que ejecuta la API de
-Anthropic, así que el destino es **Vercel** (un host estático como GitHub Pages no puede correr
-esa ruta). Vercel detecta Next.js automáticamente; no hace falta configuración extra.
+El módulo de contratos usa una **ruta de servidor** (`/api/extract`) que ejecuta el modelo de IA,
+así que el destino es **Vercel** (un host estático como GitHub Pages no puede correr esa ruta).
+Vercel detecta Next.js automáticamente; no hace falta configuración extra.
 
 ```bash
 npx vercel        # primer despliegue (preview) — pide login la primera vez
 npx vercel --prod # producción
 ```
 
-En **Project → Settings → Environment Variables** define `ANTHROPIC_API_KEY` (y, opcional,
-`CENTINELA_EXTRACT_MODEL`) para habilitar la IA real. Sin la clave, el sitio corre en **modo demo**
-(heurística local), sin romper la interfaz.
+En **Project → Settings → Environment Variables** (para *Production* y *Preview*) define la API key
+del proveedor que uses — p. ej. `DEEPSEEK_API_KEY` (lo más costo-efectivo) o `ANTHROPIC_API_KEY` —
+y opcionalmente `LLM_PROVIDER` y `CENTINELA_EXTRACT_MODEL`. Sin clave, el sitio corre en **modo demo**
+(heurística local), sin romper la interfaz. **Tras añadir variables, haz un redeploy** para que Vercel
+las inyecte.
 
 ## Implementación en 90 días (pregunta del jurado)
 1. **Semanas 1–3:** conectar la fuente de nómina del cliente (lectura, no escritura) y validar el

@@ -101,7 +101,7 @@ export default function ContratosPage() {
               extraccion?._modo ? (
                 <Badge tone={extraccion._modo === "ia" ? "success" : "neutral"}>
                   {extraccion._modo === "ia" ? (
-                    <><Cpu size={12} className="mr-1" /> IA</>
+                    <><Cpu size={12} className="mr-1" /> {String(extraccion._provider ?? "IA")}</>
                   ) : (
                     "Demo"
                   )}
