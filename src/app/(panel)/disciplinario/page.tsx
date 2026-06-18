@@ -9,6 +9,7 @@ import {
   evaluarDebidoProceso,
   generarPliegoBase,
 } from "@/lib/debido-proceso";
+import { JUSTAS_CAUSAS_EMPLEADOR } from "@/lib/data/justas-causas";
 import { PasoDebidoProceso } from "@/lib/types";
 import { TickCircle, CloseCircle, Judge, DocumentText, Warning2 } from "iconsax-react";
 
@@ -22,8 +23,10 @@ export default function DisciplinarioPage() {
     cargo: "Operario de producción",
     fechaHechos: "2026-06-10",
     hechos: "Inasistencia injustificada durante tres (3) días consecutivos.",
+    causalId: "A10",
     faltaReglamento: "Art. 7, num. 4 del Reglamento Interno (faltas de asistencia).",
   });
+  const causal = JUSTAS_CAUSAS_EMPLEADOR.find((c) => c.id === form.causalId);
   const [pliego, setPliego] = useState<string | null>(null);
 
   function set(id: string, value: boolean) {
@@ -118,8 +121,39 @@ export default function DisciplinarioPage() {
             <div className="space-y-3 px-5 py-4">
               <Inp label="Empleado" value={form.empleado} onChange={(v) => setForm({ ...form, empleado: v })} />
               <Inp label="Hechos imputados" value={form.hechos} onChange={(v) => setForm({ ...form, hechos: v })} textarea />
-              <Inp label="Falta del reglamento" value={form.faltaReglamento} onChange={(v) => setForm({ ...form, faltaReglamento: v })} />
-              <Button variant="primary" className="w-full" onClick={() => setPliego(generarPliegoBase(form))}>
+              <label className="block">
+                <span className="overline mb-1 block">Causal de despido (CST art. 62-A)</span>
+                <select
+                  className="di"
+                  value={form.causalId}
+                  onChange={(e) => setForm({ ...form, causalId: e.target.value })}
+                >
+                  {JUSTAS_CAUSAS_EMPLEADOR.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {`${c.id} — ${c.causal}`}
+                    </option>
+                  ))}
+                </select>
+                {causal?.avisoPrevio && (
+                  <span className="mt-1 flex items-center gap-1 text-[11px] text-warning">
+                    <Warning2 size={12} variant="Bold" /> Requiere aviso previo no menor a 15 días (CST art. 62, parágrafo).
+                  </span>
+                )}
+              </label>
+              <Button
+                variant="primary"
+                className="w-full"
+                onClick={() =>
+                  setPliego(
+                    generarPliegoBase({
+                      ...form,
+                      faltaReglamento: causal
+                        ? `${causal.causal} (CST art. 62-A, causal ${causal.id.slice(1)})${causal.avisoPrevio ? " — requiere aviso previo de 15 días" : ""}`
+                        : form.faltaReglamento,
+                    })
+                  )
+                }
+              >
                 Generar borrador
               </Button>
             </div>
