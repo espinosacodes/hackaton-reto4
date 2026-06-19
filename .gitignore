@@ -4,6 +4,10 @@
 /node_modules
 /.pnp
 .pnp.*
+
+# this project uses npm — ignore stray pnpm artifacts
+pnpm-lock.yaml
+pnpm-workspace.yaml
 .yarn/*
 !.yarn/patches
 !.yarn/plugins
