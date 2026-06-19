@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Logo } from "./Logo";
 import { NAV } from "./nav";
 import { cn } from "@/lib/utils";
@@ -9,9 +9,12 @@ import { SearchNormal1, Notification, ShieldTick } from "iconsax-react";
 import { CONTRATOS, HOY } from "@/lib/data/contratos";
 import { generarAlertas } from "@/lib/alertas";
 import { fmtDate } from "@/lib/utils";
+import { useBusqueda, setBusqueda } from "@/lib/store";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const busqueda = useBusqueda();
   const alertas = generarAlertas(CONTRATOS, HOY);
   const criticas = alertas.filter((a) => a.severidad === "critica").length;
 
@@ -66,21 +69,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* Main */}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <header className="z-20 flex h-16 shrink-0 items-center gap-4 border-b border-border bg-bg/85 px-6 backdrop-blur">
-          <div className="hairline hidden items-center gap-2 bg-surface px-3 py-1.5 text-[13px] text-ink-3 md:flex md:w-72">
-            <SearchNormal1 size={15} />
-            <span>Buscar empleado, contrato…</span>
-          </div>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              router.push("/contratos");
+            }}
+            className="hairline hidden items-center gap-2 bg-surface px-3 py-1.5 text-[13px] md:flex md:w-72"
+          >
+            <SearchNormal1 size={15} className="shrink-0 text-ink-3" />
+            <input
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              placeholder="Buscar empleado, contrato…"
+              className="w-full bg-transparent text-ink placeholder:text-ink-3 focus:outline-none"
+            />
+          </form>
           <div className="ml-auto flex items-center gap-4">
             <div className="hidden text-right sm:block">
               <div className="text-[12px] font-medium text-ink">Empresa Demo S.A.S.</div>
               <div className="text-[11px] text-ink-3">Nómina · {CONTRATOS.length} vínculos · {fmtDate(HOY)}</div>
             </div>
-            <div className="relative">
+            <Link href="/alertas" className="relative" aria-label="Ver alertas">
               <Notification size={20} color="var(--ink-2)" />
               {criticas > 0 && (
                 <span className="absolute -right-1 -top-1 h-2 w-2 bg-red pulse-red" style={{ borderRadius: "var(--radius)" }} />
               )}
-            </div>
+            </Link>
             <div className="flex h-8 w-8 items-center justify-center bg-black text-[12px] font-medium text-white" style={{ borderRadius: "var(--radius)" }}>
               RH
             </div>

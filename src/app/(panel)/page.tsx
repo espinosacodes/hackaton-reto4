@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import { PageHeader } from "@/components/AppShell";
 import { Card, CardHeader, Badge, Progress, Dot, sevTone, sevLabel, sevColor } from "@/components/ui";
@@ -5,6 +7,7 @@ import { Reveal, CountUp } from "@/components/motion";
 import { resumenCompliance } from "@/lib/compliance";
 import { cop, copShort, fmtDate } from "@/lib/utils";
 import { liquidar } from "@/lib/liquidacion";
+import { useParametros } from "@/lib/store";
 import { HOY } from "@/lib/data/contratos";
 import {
   Warning2,
@@ -16,12 +19,20 @@ import {
   People,
 } from "iconsax-react";
 
+const LABORALES = ["indefinido", "fijo", "obra_labor", "aprendizaje"];
+
 export default function Dashboard() {
   const r = resumenCompliance();
+  const params = useParametros();
 
-  // Pasivo prestacional estimado (suma de liquidaciones a la fecha, sin justa causa).
+  // Pasivo prestacional ACUMULADO: solo contratos laborales activos (excluye civiles:
+  // prestación de servicios y plataforma), en modo acumulado y con los parámetros vigentes.
   const pasivo = r.contratos.reduce(
-    (s, c) => s + (c.estado === "activo" ? liquidar(c, HOY, "sin_justa_causa").total : 0),
+    (s, c) =>
+      s +
+      (c.estado === "activo" && LABORALES.includes(c.tipo)
+        ? liquidar(c, HOY, "sin_justa_causa", params, "acumulado").total
+        : 0),
     0
   );
 
@@ -89,7 +100,7 @@ export default function Dashboard() {
               <div className="mt-5 border-t border-border pt-4">
                 <div className="overline mb-1">Pasivo prestacional estimado</div>
                 <div className="font-num text-[22px] text-ink">{cop(pasivo)}</div>
-                <div className="mt-1 text-[11px] text-ink-2">Suma de liquidaciones a la fecha si todos los vínculos terminaran sin justa causa.</div>
+                <div className="mt-1 text-[11px] text-ink-2">Pasivo acumulado de los vínculos laborales activos (excluye contratos civiles), asumiendo terminación sin justa causa.</div>
               </div>
             </div>
           </Card>

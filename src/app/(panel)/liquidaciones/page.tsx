@@ -5,7 +5,8 @@ import { PageHeader } from "@/components/AppShell";
 import { Card, CardHeader, Badge, Button } from "@/components/ui";
 import { Reveal } from "@/components/motion";
 import { CONTRATOS, HOY } from "@/lib/data/contratos";
-import { liquidar, compararLiquidacion, PARAMS_2026 } from "@/lib/liquidacion";
+import { liquidar, compararLiquidacion, type ModoLiquidacion } from "@/lib/liquidacion";
+import { useContratosConfirmados, useParametros, logAudit } from "@/lib/store";
 import { CausaTerminacion } from "@/lib/types";
 import { cop, fmtDate } from "@/lib/utils";
 import { Calculator, TickCircle, CloseCircle, Warning2, InfoCircle } from "iconsax-react";
@@ -13,19 +14,26 @@ import { Calculator, TickCircle, CloseCircle, Warning2, InfoCircle } from "icons
 const CAUSAS: { value: CausaTerminacion; label: string }[] = [
   { value: "sin_justa_causa", label: "Despido sin justa causa" },
   { value: "justa_causa", label: "Despido con justa causa" },
-  { value: "renuncia", label: "Renuncia voluntaria" },
-  { value: "vencimiento_plazo", label: "Vencimiento del plazo" },
-  { value: "mutuo_acuerdo", label: "Mutuo acuerdo" },
 ];
 
 export default function LiquidacionesPage() {
   const [id, setId] = useState(CONTRATOS[0].id);
   const [causa, setCausa] = useState<CausaTerminacion>("sin_justa_causa");
+  const [modo, setModo] = useState<ModoLiquidacion>("periodo");
   const [hasta, setHasta] = useState(HOY);
   const [pagado, setPagado] = useState<string>("");
+  // Guardamos la "firma" del caso enviado; el mensaje se oculta solo al cambiar el caso.
+  const [enviadoKey, setEnviadoKey] = useState<string | null>(null);
 
-  const contrato = CONTRATOS.find((c) => c.id === id)!;
-  const liq = useMemo(() => liquidar(contrato, hasta, causa), [contrato, hasta, causa]);
+  const confirmados = useContratosConfirmados();
+  const params = useParametros();
+  const todos = useMemo(() => [...confirmados, ...CONTRATOS], [confirmados]);
+  const contrato = todos.find((c) => c.id === id) ?? todos[0];
+  const liq = useMemo(
+    () => liquidar(contrato, hasta, causa, params, modo),
+    [contrato, hasta, causa, modo, params]
+  );
+  const casoKey = `${contrato.id}|${causa}|${modo}|${hasta}`;
 
   const comparacion =
     pagado.trim() !== "" ? compararLiquidacion(liq.total, Number(pagado.replace(/\D/g, ""))) : null;
@@ -50,9 +58,10 @@ export default function LiquidacionesPage() {
                   onChange={(e) => setId(e.target.value)}
                   className="input"
                 >
-                  {CONTRATOS.map((c) => (
+                  {todos.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.empleado} — {c.id}
+                      {c.id.startsWith("C-IA") ? " · validado IA" : ""}
                     </option>
                   ))}
                 </select>
@@ -68,6 +77,16 @@ export default function LiquidacionesPage() {
                       {c.label}
                     </option>
                   ))}
+                </select>
+              </Field>
+              <Field label="Modo de cálculo">
+                <select
+                  value={modo}
+                  onChange={(e) => setModo(e.target.value as ModoLiquidacion)}
+                  className="input"
+                >
+                  <option value="periodo">Liquidación del periodo (definitiva)</option>
+                  <option value="acumulado">Pasivo acumulado (mora total)</option>
                 </select>
               </Field>
               <Field label="Fecha de retiro">
@@ -103,14 +122,14 @@ export default function LiquidacionesPage() {
           <div className="mt-3 hairline flex items-start gap-2 bg-[var(--info-tint)] px-4 py-3">
             <InfoCircle size={16} color="var(--info)" className="mt-0.5 shrink-0" />
             <p className="text-[12px] leading-snug text-ink-2">
-              Parámetros {PARAMS_2026.anio}: SMMLV {cop(PARAMS_2026.smmlv)} · auxilio {cop(PARAMS_2026.auxilioTransporte)} (Decretos 1469/1470 de 2025).
+              Parámetros {params.anio}: SMMLV {cop(params.smmlv)} · auxilio {cop(params.auxilioTransporte)} (Decretos 1469/1470 de 2025).
             </p>
           </div>
         </div>
 
         {/* Result */}
         <div className="lg:col-span-2">
-          <Reveal key={id + causa + hasta}>
+          <Reveal key={id + causa + hasta + modo}>
             <Card>
               <CardHeader
                 overline="Resultado"
@@ -129,7 +148,6 @@ export default function LiquidacionesPage() {
                     <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-ink-2">
                       <span className="font-num bg-surface-2 px-1.5 py-0.5">{l.formula}</span>
                       <span className="text-ink-3">{l.base}</span>
-                      <Badge tone="neutral" className="ml-auto">{l.norma}</Badge>
                     </div>
                   </div>
                 ))}
@@ -161,9 +179,38 @@ export default function LiquidacionesPage() {
             </Reveal>
           )}
 
-          <div className="mt-3 flex justify-end gap-2">
-            <Button variant="secondary">Exportar PDF</Button>
-            <Button variant="primary">Enviar a revisión del abogado</Button>
+          <div className="mt-3 flex flex-col items-end gap-1.5">
+            <div className="flex gap-2">
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  logAudit(
+                    "Liquidación exportada",
+                    `${contrato.empleado} (${contrato.id}) · total ${cop(liq.total)}`
+                  );
+                  window.print();
+                }}
+              >
+                Exportar PDF
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  logAudit(
+                    "Liquidación enviada a revisión",
+                    `${contrato.empleado} (${contrato.id}) · total ${cop(liq.total)} · ${CAUSAS.find((x) => x.value === causa)?.label}`
+                  );
+                  setEnviadoKey(casoKey);
+                }}
+              >
+                Enviar a revisión del abogado
+              </Button>
+            </div>
+            {enviadoKey === casoKey && (
+              <p className="text-[12px]" style={{ color: "var(--success)" }}>
+                ✓ Enviada a revisión del abogado y registrada en la bitácora.
+              </p>
+            )}
           </div>
         </div>
       </div>

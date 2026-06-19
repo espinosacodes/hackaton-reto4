@@ -13,11 +13,9 @@ function ext(name: string): string {
 
 async function extractPdf(file: File): Promise<string> {
   const pdfjs = await import("pdfjs-dist");
-  // Worker servido desde el propio bundle (compatible con webpack/Turbopack).
-  pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-    "pdfjs-dist/build/pdf.worker.min.mjs",
-    import.meta.url,
-  ).toString();
+  // Worker servido desde /public (estable en Turbopack dev y en Vercel).
+  // El archivo se copia de node_modules/pdfjs-dist/build/pdf.worker.min.mjs (mismo número de versión).
+  pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
 
   const buf = await file.arrayBuffer();
   const task = pdfjs.getDocument({ data: new Uint8Array(buf) });
@@ -67,6 +65,7 @@ export async function extractTextFromFile(file: File): Promise<string> {
     }
   } catch (err) {
     if (err instanceof FileExtractError) throw err;
+    console.error("[extract-file] error real:", err);
     throw new FileExtractError(
       "No se pudo leer el archivo. ¿Está protegido o es una imagen escaneada?",
     );

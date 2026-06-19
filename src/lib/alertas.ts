@@ -15,8 +15,8 @@ export function generarAlertas(contratos: Contrato[], hoy: string): Alerta[] {
   for (const c of contratos) {
     if (c.estado !== "activo") continue;
 
-    // 1. Vencimiento de contrato a término fijo / preaviso de no renovación
-    if ((c.tipo === "fijo" || c.tipo === "obra_labor") && c.fechaFin) {
+    // 1a. Término fijo: vencimiento y preaviso de no renovación (CST art. 46)
+    if (c.tipo === "fijo" && c.fechaFin) {
       const dias = daysBetween(hoy, c.fechaFin);
       if (dias <= PREAVISO_FIJO) {
         const preavisoLimite = toISO(addDays(c.fechaFin, -PREAVISO_FIJO));
@@ -38,6 +38,29 @@ export function generarAlertas(contratos: Contrato[], hoy: string): Alerta[] {
           accion: vencidoPreaviso
             ? "Asumir la prórroga o documentar la terminación inmediatamente; evaluar indemnización."
             : "Notificar por escrito la decisión de renovar o no renovar.",
+        });
+      }
+    }
+
+    // 1b. Obra o labor: termina al concluir la obra, sin preaviso ni prórroga (CST art. 45)
+    if (c.tipo === "obra_labor" && c.fechaFin) {
+      const dias = daysBetween(hoy, c.fechaFin);
+      if (dias <= PREAVISO_FIJO) {
+        alertas.push({
+          id: `${c.id}-venc`,
+          contratoId: c.id,
+          empleado: c.empleado,
+          tipo: "vencimiento_contrato",
+          severidad: dias <= 0 ? "critica" : "media",
+          titulo:
+            dias <= 0
+              ? "Obra o labor concluida — formalizar terminación"
+              : `Obra o labor finaliza en ~${dias} días`,
+          detalle:
+            "El contrato por duración de obra o labor termina al concluir la obra pactada, sin preaviso de 30 días ni prórroga automática. Documente la culminación y liquide.",
+          norma: "CST art. 45",
+          diasRestantes: dias,
+          accion: "Verificar la conclusión de la obra y preparar la liquidación.",
         });
       }
     }
@@ -112,10 +135,45 @@ export function generarAlertas(contratos: Contrato[], hoy: string): Alerta[] {
             : "Contrato civil con posibles indicios de subordinación",
         detalle:
           c.tipo === "plataforma"
-            ? "Las plataformas de reparto tienen presunción de vínculo laboral por subordinación algorítmica."
+            ? "La Ley 2466/2025 creó un régimen especial para trabajadores de plataformas (modalidad dependiente o independiente); su vigencia está diferida a la reglamentación del Gobierno. Evalúe la subordinación, incluida la algorítmica."
             : "La continuidad y dependencia pueden configurar contrato realidad (primacía de la realidad).",
-        norma: c.tipo === "plataforma" ? "Ley 2466/2025" : "CST art. 23; CP art. 53",
+        norma: c.tipo === "plataforma" ? "Ley 2466/2025 arts. 24–30" : "CST art. 23; CP art. 53",
         accion: "Ejecutar el test de reclasificación y documentar la independencia o formalizar el vínculo.",
+      });
+    }
+
+    // 6. Reforma laboral Ley 2466/2025 — avisos informativos por modalidad
+    if (c.tipo === "fijo" || c.tipo === "obra_labor") {
+      alertas.push({
+        id: `${c.id}-2466`,
+        contratoId: c.id,
+        empleado: c.empleado,
+        tipo: "reforma_2466",
+        severidad: "info",
+        titulo:
+          c.tipo === "fijo"
+            ? "Término fijo: tope de 4 años y regla del indefinido (Ley 2466/2025)"
+            : "Obra o labor: debe constar por escrito con descripción precisa (Ley 2466/2025)",
+        detalle:
+          c.tipo === "fijo"
+            ? "La reforma fija un tope de 4 años (incluidas prórrogas) y consagra el contrato indefinido como regla general; el uso del término fijo debe justificarse. Transición: contratos vigentes al 25/06/2025 hasta el 25/06/2029."
+            : "El contrato por obra o labor debe constar por escrito describiendo de forma precisa la obra; de lo contrario se arriesga la reclasificación a indefinido.",
+        norma: "CST art. 46 (mod. Ley 2466/2025)",
+        accion: "Verificar duración acumulada y formalización; evaluar conversión a término indefinido.",
+      });
+    }
+    if (c.tipo === "aprendizaje") {
+      alertas.push({
+        id: `${c.id}-2466`,
+        contratoId: c.id,
+        empleado: c.empleado,
+        tipo: "reforma_2466",
+        severidad: "info",
+        titulo: "Aprendizaje: ahora es contrato laboral especial (Ley 2466/2025)",
+        detalle:
+          "El contrato de aprendizaje dejó de ser una relación no laboral: 75% del SMLMV en fase lectiva y 100% en fase práctica, con prestaciones y afiliación a seguridad social. Revise remuneración y afiliaciones.",
+        norma: "Ley 2466/2025 art. 21; Decreto 223/2026",
+        accion: "Ajustar la remuneración y las afiliaciones del aprendiz al nuevo régimen.",
       });
     }
   }

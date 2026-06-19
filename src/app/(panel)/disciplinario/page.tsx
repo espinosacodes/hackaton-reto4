@@ -1,184 +1,339 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { PageHeader } from "@/components/AppShell";
-import { Card, CardHeader, Badge, Button, Progress } from "@/components/ui";
+import { Card, CardHeader, Badge, Button } from "@/components/ui";
 import { Reveal } from "@/components/motion";
 import {
-  checklistDebidoProceso,
-  evaluarDebidoProceso,
-  generarPliegoBase,
+  ETAPAS,
+  etapaInfo,
+  generarDocumento,
+  type CasoDisciplinario,
+  type EtapaDisciplinaria,
 } from "@/lib/debido-proceso";
 import { JUSTAS_CAUSAS_EMPLEADOR } from "@/lib/data/justas-causas";
-import { PasoDebidoProceso } from "@/lib/types";
-import { TickCircle, CloseCircle, Judge, DocumentText, Warning2 } from "iconsax-react";
+import { CONTRATOS } from "@/lib/data/contratos";
+import { useContratosConfirmados, useDocumentosPerfil, logAudit } from "@/lib/store";
+import { Judge, DocumentText, Warning2, TickCircle, Flash, Cpu } from "iconsax-react";
+
+const EMPRESA = "Empresa Demo S.A.S.";
 
 export default function DisciplinarioPage() {
-  const [pasos, setPasos] = useState<PasoDebidoProceso[]>(checklistDebidoProceso);
-  const evalr = useMemo(() => evaluarDebidoProceso(pasos), [pasos]);
+  const confirmados = useContratosConfirmados();
+  const docsPerfil = useDocumentosPerfil();
+  const todos = useMemo(() => [...confirmados, ...CONTRATOS], [confirmados]);
+
+  const [trabajadorId, setTrabajadorId] = useState(
+    CONTRATOS.find((c) => c.cargo.toLowerCase().includes("operario"))?.id ?? CONTRATOS[0].id
+  );
+  const trab = todos.find((c) => c.id === trabajadorId) ?? todos[0];
+
+  const [etapa, setEtapa] = useState<EtapaDisciplinaria>("hechos");
+  const info = etapaInfo(etapa);
+  const idxActual = ETAPAS.findIndex((e) => e.key === etapa);
 
   const [form, setForm] = useState({
-    empresa: "Empresa Demo S.A.S.",
-    empleado: "Jhon Fredy Loaiza",
-    cargo: "Operario de producción",
     fechaHechos: "2026-06-10",
     hechos: "Inasistencia injustificada durante tres (3) días consecutivos.",
     causalId: "A10",
-    faltaReglamento: "Art. 7, num. 4 del Reglamento Interno (faltas de asistencia).",
+    normaInterna: "Art. 7, num. 4 del Reglamento Interno (faltas de asistencia).",
+    fechaDiligencia: "",
+    lugarDiligencia: "",
+    decision: "",
   });
   const causal = JUSTAS_CAUSAS_EMPLEADOR.find((c) => c.id === form.causalId);
-  const [pliego, setPliego] = useState<string | null>(null);
+  const rit = docsPerfil.find((d) => d.tipo.includes("RIT")) ?? docsPerfil[0];
 
-  function set(id: string, value: boolean) {
-    setPasos((prev) => prev.map((p) => (p.id === id ? { ...p, cumplido: value } : p)));
+  const [plan, setPlan] = useState("");
+  const [asesoria, setAsesoria] = useState<Record<string, unknown> | null>(null);
+  const [cargando, setCargando] = useState(false);
+  const [documento, setDocumento] = useState<string | null>(null);
+
+  const caso: CasoDisciplinario = {
+    empresa: EMPRESA,
+    empleado: trab.empleado,
+    cargo: trab.cargo,
+    fechaHechos: form.fechaHechos,
+    hechos: form.hechos,
+    causalTexto: causal
+      ? `${causal.causal} (CST art. 62-A, causal ${causal.id.slice(1)})${causal.avisoPrevio ? " — requiere aviso previo de 15 días" : ""}`
+      : undefined,
+    normaInterna: form.normaInterna || undefined,
+    reglamentoNombre: rit?.nombre,
+    fechaDiligencia: form.fechaDiligencia || undefined,
+    lugarDiligencia: form.lugarDiligencia || undefined,
+    decision: form.decision || undefined,
+  };
+
+  async function pedirAsesoria() {
+    setCargando(true);
+    setAsesoria(null);
+    try {
+      const res = await fetch("/api/disciplinario", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          empleado: trab.empleado,
+          cargo: trab.cargo,
+          hechos: form.hechos,
+          fechaHechos: form.fechaHechos,
+          etapa,
+          etapaTitulo: info.titulo,
+          garantias: info.garantias,
+          causalTexto: caso.causalTexto,
+          normaInterna: form.normaInterna,
+          planUsuario: plan,
+          documentos: docsPerfil.map((d) => ({ tipo: d.tipo, nombre: d.nombre, texto: d.texto })),
+        }),
+      });
+      const data = await res.json();
+      setAsesoria(data);
+      logAudit("Asesoría disciplinaria solicitada", `${trab.empleado} · etapa: ${info.titulo}`);
+    } catch {
+      setAsesoria({ error: "No se pudo obtener la asesoría." });
+    } finally {
+      setCargando(false);
+    }
+  }
+
+  function generar() {
+    if (!info.documento) return;
+    setDocumento(generarDocumento(info.documento.tipo, caso));
+    logAudit("Documento disciplinario generado", `${info.documento.label} — ${trab.empleado}`);
+  }
+
+  function cambiarEtapa(k: EtapaDisciplinaria) {
+    setEtapa(k);
+    setAsesoria(null);
+    setDocumento(null);
+    setPlan("");
   }
 
   return (
     <div className="mx-auto max-w-6xl">
       <PageHeader
         overline="Gestión de procesos disciplinarios"
-        title="Debido proceso y pliego de cargos"
-        subtitle="Verifica que el procedimiento disciplinario cumpla las garantías mínimas (CN art. 29, CST art. 115, CSJ SL1706-2024) antes de adoptar una decisión, y asiste la elaboración del pliego de cargos."
+        title="Asistente del debido proceso (art. 115 CST)"
+        subtitle="Elige al trabajador y la etapa del proceso; el asistente te muestra qué corresponde, te aconseja con IA (tú decides) y genera el documento de cada etapa. Las garantías se evalúan por etapa, sin listas interminables."
       />
 
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-5">
-        {/* Checklist */}
-        <div className="lg:col-span-3">
-          <Card>
-            <CardHeader
-              overline="Garantías del debido proceso"
-              title="Checklist de cumplimiento"
-              right={<Judge size={22} color="var(--red)" variant="Bulk" />}
-            />
-            <div className="divide-y divide-border">
-              {pasos.map((p) => (
-                <div key={p.id} className="px-5 py-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[13.5px] font-medium text-ink">{p.paso}</span>
-                        {!p.obligatorio && <Badge tone="neutral">Opcional</Badge>}
-                      </div>
-                      <div className="font-num mt-0.5 text-[11px] text-ink-3">{p.norma}</div>
-                    </div>
-                    <div className="flex shrink-0 gap-1">
-                      <Toggle active={p.cumplido === true} tone="success" onClick={() => set(p.id, true)}>
-                        <TickCircle size={16} variant={p.cumplido === true ? "Bold" : "Linear"} />
-                      </Toggle>
-                      <Toggle active={p.cumplido === false} tone="red" onClick={() => set(p.id, false)}>
-                        <CloseCircle size={16} variant={p.cumplido === false ? "Bold" : "Linear"} />
-                      </Toggle>
-                    </div>
-                  </div>
-                </div>
+      {docsPerfil.length === 0 && (
+        <div className="mb-4 hairline flex items-start gap-3 bg-[var(--warning-tint)] px-4 py-3">
+          <Warning2 size={18} color="var(--warning)" variant="Bold" className="mt-0.5 shrink-0" />
+          <p className="text-[12.5px] leading-snug text-ink-2">
+            No has cargado documentos internos. Ve a{" "}
+            <Link href="/perfil" className="font-medium text-ink underline">
+              Perfil
+            </Link>{" "}
+            y sube el RIT/manual una sola vez para que la IA cite la norma interna específica.
+          </p>
+        </div>
+      )}
+
+      {/* Datos del caso */}
+      <Card>
+        <CardHeader overline="Caso" title="Trabajador y hechos" right={<Judge size={20} color="var(--red)" variant="Bulk" />} />
+        <div className="grid grid-cols-1 gap-3 px-5 py-4 md:grid-cols-2">
+          <Campo label="Trabajador">
+            <select className="dx" value={trabajadorId} onChange={(e) => setTrabajadorId(e.target.value)}>
+              {todos.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.empleado} — {c.cargo}
+                </option>
               ))}
+            </select>
+          </Campo>
+          <Campo label="Fecha de los hechos">
+            <input type="date" className="dx" value={form.fechaHechos} onChange={(e) => setForm({ ...form, fechaHechos: e.target.value })} />
+          </Campo>
+          <div className="md:col-span-2">
+            <Campo label="Hechos imputados">
+              <textarea className="dx" rows={2} value={form.hechos} onChange={(e) => setForm({ ...form, hechos: e.target.value })} />
+            </Campo>
+          </div>
+          <Campo label="Causal (CST art. 62-A)">
+            <select className="dx" value={form.causalId} onChange={(e) => setForm({ ...form, causalId: e.target.value })}>
+              {JUSTAS_CAUSAS_EMPLEADOR.map((c) => (
+                <option key={c.id} value={c.id}>{`${c.id} — ${c.causal}`}</option>
+              ))}
+            </select>
+          </Campo>
+          <Campo label="Norma interna infringida">
+            <input className="dx" value={form.normaInterna} onChange={(e) => setForm({ ...form, normaInterna: e.target.value })} />
+          </Campo>
+        </div>
+      </Card>
+
+      <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-5">
+        {/* Línea de tiempo del proceso */}
+        <div className="lg:col-span-2">
+          <Card>
+            <CardHeader overline="Proceso" title="¿En qué etapa estás?" />
+            <div className="divide-y divide-border">
+              {ETAPAS.map((e, i) => {
+                const estado = i < idxActual ? "hecha" : i === idxActual ? "actual" : "pendiente";
+                const color = estado === "hecha" ? "var(--success)" : estado === "actual" ? "var(--red)" : "var(--ink-3)";
+                return (
+                  <button
+                    key={e.key}
+                    onClick={() => cambiarEtapa(e.key)}
+                    className="flex w-full items-start gap-3 px-5 py-3 text-left transition-colors hover:bg-surface-2"
+                    style={{ background: estado === "actual" ? "var(--surface-2)" : undefined }}
+                  >
+                    <span
+                      className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[11px] font-bold"
+                      style={{
+                        borderColor: color,
+                        color: estado === "pendiente" ? "var(--ink-3)" : "#fff",
+                        background: estado === "pendiente" ? "var(--surface)" : color,
+                      }}
+                    >
+                      {estado === "hecha" ? "✓" : e.num}
+                    </span>
+                    <span className="min-w-0">
+                      <span className={`block text-[13px] ${estado === "actual" ? "font-semibold text-ink" : "text-ink-2"}`}>
+                        {e.titulo}
+                      </span>
+                      <span className="font-num text-[10.5px] text-ink-3">{e.norma}</span>
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </Card>
         </div>
 
-        {/* Verdict + pliego */}
-        <div className="space-y-3 lg:col-span-2">
-          <Reveal key={evalr.pct + String(evalr.nulidad)}>
+        {/* Panel de la etapa activa */}
+        <div className="lg:col-span-3">
+          <Reveal key={etapa}>
             <Card>
-              <CardHeader overline="Evaluación" title="Garantías cubiertas" />
-              <div className="px-5 py-4">
-                <div className="flex items-end justify-between">
-                  <span className="font-num text-[34px] leading-none text-ink">{evalr.pct}%</span>
-                  <span className="text-[12px] text-ink-2">
-                    {evalr.cumplidos}/{evalr.totalObligatorios} obligatorias
-                  </span>
+              <CardHeader
+                overline={`Etapa ${info.num} de ${ETAPAS.length}`}
+                title={info.titulo}
+                right={<Badge tone="neutral">{info.norma}</Badge>}
+              />
+              <div className="space-y-4 px-5 py-4">
+                <p className="text-[13px] leading-relaxed text-ink-2">{info.descripcion}</p>
+
+                <div>
+                  <div className="overline mb-1.5">Qué debe cumplirse en esta etapa</div>
+                  <ul className="space-y-1">
+                    {info.garantias.map((g) => (
+                      <li key={g} className="flex items-start gap-2 text-[12.5px] text-ink-2">
+                        <TickCircle size={14} color="var(--ink-3)" className="mt-0.5 shrink-0" /> {g}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-                <Progress
-                  className="mt-3"
-                  value={evalr.pct}
-                  tone={evalr.nulidad ? "var(--red)" : evalr.pendientes.length ? "var(--warning)" : "var(--success)"}
-                />
-                <div
-                  className="mt-4 hairline flex items-start gap-2 px-3 py-3"
-                  style={{ background: evalr.nulidad ? "var(--red-tint)" : evalr.pendientes.length ? "var(--warning-tint)" : "var(--success-tint)" }}
-                >
-                  <Warning2 size={16} color={evalr.nulidad ? "var(--red)" : evalr.pendientes.length ? "var(--warning)" : "var(--success)"} variant="Bold" className="mt-0.5 shrink-0" />
-                  <p className="text-[12.5px] leading-snug text-ink-2">{evalr.veredicto}</p>
+
+                {/* Asesoría IA */}
+                <div className="hairline bg-surface-2 px-4 py-3">
+                  <div className="mb-2 flex items-center gap-2">
+                    <Cpu size={16} color="var(--red)" />
+                    <span className="text-[13px] font-medium text-ink">Asesoría de la IA</span>
+                    <span className="text-[11px] text-ink-3">— aconseja; tú decides</span>
+                  </div>
+                  <label className="block">
+                    <span className="overline mb-1 block">¿Qué piensa hacer la empresa? (opcional)</span>
+                    <textarea
+                      className="dx"
+                      rows={2}
+                      placeholder="Escribe tu plan y la IA lo evalúa…"
+                      value={plan}
+                      onChange={(e) => setPlan(e.target.value)}
+                    />
+                  </label>
+                  <Button variant="primary" className="mt-2" onClick={pedirAsesoria} disabled={cargando}>
+                    <Flash size={15} variant="Bold" /> {cargando ? "Analizando…" : "Pedir asesoría a la IA"}
+                  </Button>
+
+                  {asesoria && !asesoria.error && (
+                    <div className="mt-3 space-y-2 text-[12.5px]">
+                      {asesoria._modo === "error" && (
+                        <p className="text-[11.5px] text-red-dark">
+                          La IA falló; mostrando asesoría base. {String(asesoria._warning ?? "")}
+                        </p>
+                      )}
+                      <Linea k="Recomendación" v={String(asesoria.recomendacion ?? "")} />
+                      <Linea k="Fundamento" v={String(asesoria.fundamento ?? "")} />
+                      {Array.isArray(asesoria.riesgos) && (asesoria.riesgos as string[]).length > 0 && (
+                        <div>
+                          <span className="overline">Riesgos a evitar</span>
+                          <ul className="mt-1 space-y-1">
+                            {(asesoria.riesgos as string[]).map((r) => (
+                              <li key={r} className="flex items-start gap-1.5 text-ink-2">
+                                <Warning2 size={13} color="var(--warning)" className="mt-0.5 shrink-0" /> {r}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      <Linea k="Siguiente paso" v={String(asesoria.siguientePaso ?? "")} />
+                      {String(asesoria.evaluacionPlan ?? "") && (
+                        <div className="hairline bg-[var(--info-tint)] px-3 py-2">
+                          <span className="font-medium text-ink">Sobre tu plan: </span>
+                          {String(asesoria.evaluacionPlan)}
+                        </div>
+                      )}
+                      <div className="pt-1">
+                        <Badge tone={asesoria._modo === "ia" ? "success" : "neutral"}>
+                          {asesoria._modo === "ia" ? String(asesoria._provider ?? "IA") : "Asesoría base (sin IA)"}
+                        </Badge>
+                      </div>
+                    </div>
+                  )}
                 </div>
-                {evalr.incumplidos.length > 0 && (
-                  <div className="mt-3">
-                    <div className="overline mb-1.5">Garantías incumplidas</div>
-                    <ul className="space-y-1">
-                      {evalr.incumplidos.map((p) => (
-                        <li key={p.id} className="flex items-start gap-1.5 text-[12px] text-red-dark">
-                          <CloseCircle size={13} className="mt-0.5 shrink-0" /> {p.paso}
-                        </li>
-                      ))}
-                    </ul>
+
+                {/* Documento de la etapa */}
+                {info.documento && (
+                  <div>
+                    <Button variant="secondary" onClick={generar}>
+                      <DocumentText size={15} /> {info.documento.label}
+                    </Button>
                   </div>
                 )}
               </div>
             </Card>
           </Reveal>
 
-          <Card>
-            <CardHeader overline="Asistente" title="Generar pliego de cargos" right={<DocumentText size={20} color="var(--red)" />} />
-            <div className="space-y-3 px-5 py-4">
-              <Inp label="Empleado" value={form.empleado} onChange={(v) => setForm({ ...form, empleado: v })} />
-              <Inp label="Hechos imputados" value={form.hechos} onChange={(v) => setForm({ ...form, hechos: v })} textarea />
-              <label className="block">
-                <span className="overline mb-1 block">Causal de despido (CST art. 62-A)</span>
-                <select
-                  className="di"
-                  value={form.causalId}
-                  onChange={(e) => setForm({ ...form, causalId: e.target.value })}
-                >
-                  {JUSTAS_CAUSAS_EMPLEADOR.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {`${c.id} — ${c.causal}`}
-                    </option>
-                  ))}
-                </select>
-                {causal?.avisoPrevio && (
-                  <span className="mt-1 flex items-center gap-1 text-[11px] text-warning">
-                    <Warning2 size={12} variant="Bold" /> Requiere aviso previo no menor a 15 días (CST art. 62, parágrafo).
-                  </span>
-                )}
-              </label>
-              <Button
-                variant="primary"
-                className="w-full"
-                onClick={() =>
-                  setPliego(
-                    generarPliegoBase({
-                      ...form,
-                      faltaReglamento: causal
-                        ? `${causal.causal} (CST art. 62-A, causal ${causal.id.slice(1)})${causal.avisoPrevio ? " — requiere aviso previo de 15 días" : ""}`
-                        : form.faltaReglamento,
-                    })
-                  )
-                }
-              >
-                Generar borrador
-              </Button>
-            </div>
-          </Card>
+          {documento && (
+            <Reveal className="mt-3" key={documento.slice(0, 30)}>
+              <Card>
+                <CardHeader
+                  overline="Borrador asistido"
+                  title="Documento generado"
+                  subtitle="Requiere revisión y firma del abogado responsable."
+                  right={<Badge tone="warning">Requiere validación</Badge>}
+                />
+                <pre className="overflow-x-auto whitespace-pre-wrap px-5 py-4 font-mono text-[12px] leading-relaxed text-ink-2">
+                  {documento}
+                </pre>
+                <div className="flex justify-end gap-2 px-5 pb-4">
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      navigator.clipboard?.writeText(documento);
+                      logAudit("Documento disciplinario copiado", `${info.titulo} — ${trab.empleado}`);
+                    }}
+                  >
+                    Copiar
+                  </Button>
+                  <Button
+                    variant="primary"
+                    onClick={() => logAudit("Documento enviado a firma del abogado", `${info.titulo} — ${trab.empleado}`)}
+                  >
+                    Enviar a firma del abogado
+                  </Button>
+                </div>
+              </Card>
+            </Reveal>
+          )}
         </div>
       </div>
 
-      {pliego && (
-        <Reveal className="mt-3">
-          <Card>
-            <CardHeader
-              overline="Borrador asistido"
-              title="Pliego de cargos"
-              subtitle="Estructura conforme a CN art. 29 / CST art. 115. Requiere revisión y firma del abogado."
-              right={<Badge tone="warning">Requiere validación</Badge>}
-            />
-            <pre className="overflow-x-auto whitespace-pre-wrap px-5 py-4 font-mono text-[12px] leading-relaxed text-ink-2">
-              {pliego}
-            </pre>
-          </Card>
-        </Reveal>
-      )}
-
       <style jsx global>{`
-        .di {
+        .dx {
           width: 100%;
           border: 1px solid var(--border-2);
           background: var(--surface);
@@ -187,39 +342,30 @@ export default function DisciplinarioPage() {
           color: var(--ink);
           border-radius: var(--radius);
         }
-        .di:focus { outline: none; border-color: var(--ink); }
+        .dx:focus {
+          outline: none;
+          border-color: var(--ink);
+        }
       `}</style>
     </div>
   );
 }
 
-function Toggle({ active, tone, onClick, children }: { active: boolean; tone: "success" | "red"; onClick: () => void; children: React.ReactNode }) {
-  const color = tone === "success" ? "var(--success)" : "var(--red)";
-  return (
-    <button
-      onClick={onClick}
-      className="flex h-7 w-7 items-center justify-center border transition-colors"
-      style={{
-        borderRadius: "var(--radius)",
-        background: active ? (tone === "success" ? "var(--success-tint)" : "var(--red-tint)") : "var(--surface)",
-        borderColor: active ? color : "var(--border-2)",
-        color: active ? color : "var(--ink-3)",
-      }}
-    >
-      {children}
-    </button>
-  );
-}
-
-function Inp({ label, value, onChange, textarea }: { label: string; value: string; onChange: (v: string) => void; textarea?: boolean }) {
+function Campo({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
       <span className="overline mb-1 block">{label}</span>
-      {textarea ? (
-        <textarea className="di" rows={2} value={value} onChange={(e) => onChange(e.target.value)} />
-      ) : (
-        <input className="di" value={value} onChange={(e) => onChange(e.target.value)} />
-      )}
+      {children}
     </label>
+  );
+}
+
+function Linea({ k, v }: { k: string; v: string }) {
+  if (!v) return null;
+  return (
+    <div>
+      <span className="overline">{k}</span>
+      <p className="text-ink-2">{v}</p>
+    </div>
   );
 }

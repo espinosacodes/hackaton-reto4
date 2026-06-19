@@ -50,7 +50,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ...data, _modo: "ia", _provider: provider, _model: model });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Error de extracción";
-    // Degradación elegante: cae al mock para no romper la demo.
-    return NextResponse.json({ ...mockExtraccion(text), _modo: "demo", _warning: msg });
+    // La IA falló: NO disimular. Devolvemos datos de relleno marcados como NO confiables
+    // (_modo: "error") para que la interfaz lo advierta de forma prominente al usuario.
+    return NextResponse.json({ ...mockExtraccion(text), _modo: "error", _warning: msg });
   }
 }
