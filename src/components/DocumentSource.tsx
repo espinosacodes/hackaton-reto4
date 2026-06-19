@@ -176,9 +176,10 @@ export function DocumentSource({
       if (cancelado) return;
       setDriveInfo({ configured: !!d.configured, email: d.serviceAccountEmail ?? "" });
       const saved = typeof window !== "undefined" ? localStorage.getItem(DRIVE_FOLDER_KEY) : null;
-      if (saved) {
+      if (saved && d.configured) {
         setFolderInput(saved);
         setFolderId(saved);
+        sincronizarDrive(saved); // lista de inmediato la carpeta recordada
       }
     })();
     return () => { cancelado = true; };
