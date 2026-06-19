@@ -297,16 +297,6 @@ export default function DisciplinarioPage() {
               <textarea className="dx" rows={2} value={form.hechos} onChange={(e) => setForm({ ...form, hechos: e.target.value })} />
             </label>
           </div>
-          <Campo label="Causal (CST art. 62-A)">
-            <select className="dx" value={form.causalId} onChange={(e) => setForm({ ...form, causalId: e.target.value })}>
-              {JUSTAS_CAUSAS_EMPLEADOR.map((c) => (
-                <option key={c.id} value={c.id}>{`${c.id} — ${c.causal}`}</option>
-              ))}
-            </select>
-          </Campo>
-          <Campo label="Norma interna infringida">
-            <input className="dx" value={form.normaInterna} onChange={(e) => setForm({ ...form, normaInterna: e.target.value })} />
-          </Campo>
           <div className="md:col-span-2">
             <Button variant="secondary" onClick={sugerirCausal} disabled={sugiriendo}>
               <Magicpen size={15} variant="Bold" color="var(--red)" />{" "}
@@ -317,7 +307,7 @@ export default function DisciplinarioPage() {
                 <div className="mb-1.5 flex items-center gap-1.5">
                   <Cpu size={14} color="var(--red)" />
                   <span className="font-medium text-ink">Preselección de la IA</span>
-                  <span className="text-[10.5px] text-ink-3">— se aplicó arriba; tú confirmas o cambias</span>
+                  <span className="text-[10.5px] text-ink-3">— rellenó la causal y la norma de abajo; confírmalas o cámbialas</span>
                 </div>
                 {String(sugerencia.justificacionCausal ?? "") && (
                   <p className="text-ink-2"><span className="font-medium text-ink">Causal: </span>{String(sugerencia.justificacionCausal)}</p>
@@ -337,6 +327,16 @@ export default function DisciplinarioPage() {
             )}
             {Boolean(sugerencia?.error) && <p className="mt-2 text-[12px] text-red-dark">{String(sugerencia?.error)}</p>}
           </div>
+          <Campo label="Causal (CST art. 62-A)">
+            <select className="dx" value={form.causalId} onChange={(e) => setForm({ ...form, causalId: e.target.value })}>
+              {JUSTAS_CAUSAS_EMPLEADOR.map((c) => (
+                <option key={c.id} value={c.id}>{`${c.id} — ${c.causal}`}</option>
+              ))}
+            </select>
+          </Campo>
+          <Campo label="Norma interna infringida">
+            <input className="dx" value={form.normaInterna} onChange={(e) => setForm({ ...form, normaInterna: e.target.value })} />
+          </Campo>
         </div>
       </Card>
 

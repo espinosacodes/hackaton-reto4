@@ -24,6 +24,15 @@ const tipoTone: Record<string, "neutral" | "warning" | "red"> = {
   plataforma: "red",
 };
 
+const TITULOS: Record<string, string> = {
+  indefinido: "CONTRATO INDIVIDUAL DE TRABAJO A TÉRMINO INDEFINIDO",
+  fijo: "CONTRATO INDIVIDUAL DE TRABAJO A TÉRMINO FIJO",
+  obra_labor: "CONTRATO DE TRABAJO POR DURACIÓN DE LA OBRA O LABOR",
+  aprendizaje: "CONTRATO DE APRENDIZAJE",
+  prestacion_servicios: "CONTRATO DE PRESTACIÓN DE SERVICIOS",
+  plataforma: "CONTRATO DE VINCULACIÓN — PLATAFORMA DIGITAL",
+};
+
 const EJEMPLO = `CONTRATO INDIVIDUAL DE TRABAJO A TÉRMINO FIJO
 
 Entre EMPRESA DEMO S.A.S. y la señora MARÍA CAMILA RESTREPO, identificada con C.C. 1.144.092.331, se celebra el presente contrato para el cargo de ANALISTA DE CARTERA.
@@ -403,7 +412,91 @@ function mockClient(text: string): Record<string, unknown> {
   };
 }
 
+// Genera un documento de contrato legible a partir de los datos estructurados.
+// (Representativo: el texto original del PDF no se persiste en la demo.)
+function generarTextoContrato(c: Contrato): string {
+  const esCivil = c.tipo === "prestacion_servicios" || c.tipo === "plataforma";
+  const rol = esCivil ? "EL CONTRATISTA" : "EL TRABAJADOR";
+  const parte = esCivil ? "EL CONTRATANTE" : "EL EMPLEADOR";
+  const L: string[] = [];
+  L.push(TITULOS[c.tipo] ?? "CONTRATO");
+  L.push("");
+  L.push(
+    `Entre la empresa, en adelante ${parte}, y ${c.empleado}, identificado(a) con documento ${c.documento}, en adelante ${rol}, se celebra el presente contrato, regido por las siguientes cláusulas:`
+  );
+  L.push("");
+  L.push(
+    `PRIMERA. ${esCivil ? "Objeto" : "Cargo y funciones"}. ${rol} ${
+      esCivil
+        ? `prestará sus servicios de ${c.cargo} de forma autónoma e independiente, sin subordinación ni dependencia respecto de ${parte}.`
+        : `desempeñará el cargo de ${c.cargo} en el área de ${c.area}, bajo la subordinación y dependencia continuada de ${parte}.`
+    }`
+  );
+  L.push("");
+  L.push(
+    `SEGUNDA. ${esCivil ? "Autonomía" : "Jornada"}. ${
+      esCivil
+        ? `${rol} no estará sujeto a horario ni a jornada de trabajo y organizará su tiempo con plena independencia.`
+        : `La jornada será de ${c.horasSemana} horas semanales (jornada ${c.jornada}).`
+    }`
+  );
+  L.push("");
+  L.push(
+    `TERCERA. ${esCivil ? "Honorarios" : "Remuneración"}. ${
+      esCivil
+        ? `${parte} pagará honorarios de ${cop(c.salarioMensual)} mensuales contra presentación de factura o cuenta de cobro.`
+        : `${parte} pagará un salario mensual de ${cop(c.salarioMensual)}${
+            c.salarioIntegral ? ", en la modalidad de salario integral (CST art. 132)" : ""
+          }${c.auxilioTransporte ? ", más el auxilio de transporte de ley" : ""}.`
+    }`
+  );
+  L.push("");
+  if (esCivil) {
+    L.push(`CUARTA. No exclusividad. ${rol} podrá prestar sus servicios a terceros, sin relación de exclusividad con ${parte}.`);
+    L.push("");
+    L.push(`QUINTA. Medios propios. ${rol} ejecutará la labor con sus propios medios, herramientas y equipos, asumiendo los riesgos de su actividad.`);
+  } else {
+    L.push(`CUARTA. Prestaciones. ${parte} reconocerá las prestaciones sociales de ley: cesantías e intereses, prima de servicios, vacaciones y seguridad social integral.`);
+    L.push("");
+    L.push(`QUINTA. Obligaciones. ${rol} cumplirá el Reglamento Interno de Trabajo, las instrucciones de ${parte} y las normas de seguridad y salud en el trabajo.`);
+  }
+  L.push("");
+  L.push(
+    `SEXTA. Vigencia. ${
+      c.fechaFin
+        ? `El presente contrato regirá del ${fmtDate(c.fechaInicio)} al ${fmtDate(c.fechaFin)}.`
+        : `El presente contrato regirá a partir del ${fmtDate(c.fechaInicio)} por término indefinido.`
+    }`
+  );
+  L.push("");
+  L.push("Para constancia se firma por las partes.");
+  L.push("");
+  L.push("____________________________");
+  L.push(`${parte}`);
+  L.push("");
+  L.push("____________________________");
+  L.push(`${rol}`);
+  return L.join("\n");
+}
+
+// Abre el documento en una ventana lista para imprimir / guardar como PDF.
+function imprimirContrato(c: Contrato) {
+  const texto = generarTextoContrato(c);
+  const w = window.open("", "_blank", "width=820,height=920");
+  if (!w) return;
+  const safe = texto.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  w.document.write(
+    `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Contrato — ${c.empleado}</title>` +
+      `<style>body{font-family:Georgia,'Times New Roman',serif;max-width:680px;margin:48px auto;padding:0 28px;color:#1a1a1a;font-size:13px;line-height:1.7;white-space:pre-wrap}</style>` +
+      `</head><body>${safe}</body></html>`
+  );
+  w.document.close();
+  w.focus();
+  w.print();
+}
+
 function Row({ c, abierto, onToggle }: { c: Contrato; abierto: boolean; onToggle: () => void }) {
+  const [verDoc, setVerDoc] = useState(false);
   const confPct = Math.round((c.extraccionConfianza ?? 0) * 100);
   const confColor = confPct >= 85 ? "var(--success)" : confPct >= 60 ? "var(--warning)" : "var(--red)";
   return (
@@ -470,6 +563,25 @@ function Row({ c, abierto, onToggle }: { c: Contrato; abierto: boolean; onToggle
             <Campo k="Confianza IA" v={`${confPct}%`} />
             <Campo k="Fuente" v={c.fuente === "ia" ? "IA" : "Manual"} />
           </dl>
+
+          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">
+            <Button variant="secondary" onClick={() => setVerDoc((v) => !v)}>
+              {verDoc ? "Ocultar documento" : "Ver documento del contrato"}
+            </Button>
+            <Button variant="secondary" onClick={() => imprimirContrato(c)}>
+              Descargar PDF
+            </Button>
+          </div>
+          {verDoc && (
+            <div className="mt-2 max-h-80 overflow-y-auto hairline bg-surface-2 px-4 py-3">
+              <div className="whitespace-pre-wrap text-[11.5px] leading-relaxed text-ink-2">
+                {generarTextoContrato(c)}
+              </div>
+              <p className="mt-2 text-[10px] leading-snug text-ink-3">
+                Documento generado a partir de los datos extraídos (representativo). No reemplaza el contrato firmado original.
+              </p>
+            </div>
+          )}
         </div>
       )}
     </div>

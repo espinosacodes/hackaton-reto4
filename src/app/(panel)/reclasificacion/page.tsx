@@ -40,6 +40,7 @@ export default function ReclasificacionPage() {
   const [desc, setDesc] = useState("");
   const [iaLoading, setIaLoading] = useState(false);
   const [iaMsg, setIaMsg] = useState<string | null>(null);
+  const [verContrato, setVerContrato] = useState(false);
 
   const evals = useMemo(
     () =>
@@ -112,7 +113,7 @@ export default function ReclasificacionPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-5xl 2xl:max-w-6xl">
+    <div className="mx-auto w-full max-w-6xl">
       <PageHeader
         overline="Riesgo de contrato realidad"
         title="Cómo se opera la relación, no qué dice el papel"
@@ -192,8 +193,9 @@ export default function ReclasificacionPage() {
         </div>
       </Card>
 
+      {/* ── Detalle de la relación seleccionada ── */}
+      {/* Captura de la realidad (izquierda, amplia) + Veredicto en vivo (derecha, sticky) */}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-5">
-        {/* Captura de la realidad */}
         <div className="space-y-3 lg:col-span-3">
           <Card>
             <CardHeader
@@ -282,13 +284,13 @@ export default function ReclasificacionPage() {
           </Card>
         </div>
 
-        {/* Veredicto + exposición */}
+        {/* Veredicto en vivo (sticky) */}
         <div className="lg:col-span-2">
-          <div className="space-y-3 lg:sticky lg:top-4">
+          <div className="lg:sticky lg:top-4">
             <Reveal key={`${sel.c.id}-${sel.r.puntaje}-${sel.r.probabilidad}`}>
               <Card>
                 <CardHeader
-                  overline="Veredicto"
+                  overline="Veredicto en vivo"
                   title={sel.c.empleado}
                   right={
                     <div className="flex items-center gap-2">
@@ -341,107 +343,143 @@ export default function ReclasificacionPage() {
                 </div>
               </Card>
             </Reveal>
-
-            <Card>
-              <CardHeader
-                overline="Exposición en pesos"
-                title="Desglose de la contingencia"
-                subtitle={`Ventana no prescrita: ${sel.r.exposicion.mesesExpuestos} meses (prescripción 3 años, CST 488–489).`}
-              />
-              <div className="divide-y divide-border">
-                {sel.r.exposicion.rubros.map((ru) => (
-                  <div key={ru.concepto} className="px-5 py-3">
-                    <div className="flex items-baseline justify-between gap-3">
-                      <span className="text-[12.5px] text-ink">{ru.concepto}</span>
-                      <span className="font-num text-[12.5px] text-ink">{cop(ru.valor)}</span>
-                    </div>
-                    <div className="mt-0.5 text-[10.5px] text-ink-3">
-                      {ru.detalle} · {ru.norma}
-                    </div>
-                  </div>
-                ))}
-                <div className="flex items-baseline justify-between gap-3 bg-surface-2 px-5 py-3">
-                  <span className="text-[12.5px] font-medium text-ink">Total exposición máxima</span>
-                  <span className="font-num text-[13px] font-medium text-ink">
-                    {cop(sel.r.exposicion.montoMaximo)}
-                  </span>
-                </div>
-              </div>
-            </Card>
-
-            {sel.r.contradicciones.length > 0 && (
-              <Card>
-                <CardHeader
-                  overline="Contrato ↔ realidad"
-                  title="Contradicciones detectadas"
-                  subtitle="El papel dice una cosa; la operación, otra. Eso es el corazón del dictamen."
-                  right={<Warning2 size={18} color="var(--warning)" />}
-                />
-                <div className="divide-y divide-border">
-                  {sel.r.contradicciones.map((cd, i) => (
-                    <div key={i} className="px-5 py-3">
-                      <Badge tone={cd.severidad === "alta" ? "red" : "warning"}>{cd.severidad}</Badge>
-                      <p className="mt-1.5 text-[12px] text-ink-2">
-                        <span className="text-ink-3">El contrato dice:</span> {cd.contratoDice}
-                      </p>
-                      <p className="mt-1 text-[12px] text-ink">
-                        <span className="text-ink-3">La realidad muestra:</span> {cd.realidadMuestra}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            )}
-
-            <Card>
-              <CardHeader
-                overline="Concepto legal"
-                title="Elementos del contrato realidad"
-                subtitle="Art. 23 CST: prestación personal + subordinación + remuneración."
-                right={<Judge size={18} color="var(--red)" />}
-              />
-              <div className="divide-y divide-border">
-                {sel.r.conceptoPorElemento.map((el, i) => (
-                  <div key={i} className="flex items-start gap-3 px-5 py-3">
-                    <span
-                      className="mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center border text-[11px] font-bold leading-none text-white"
-                      style={{
-                        borderRadius: "var(--radius)",
-                        background: el.presente ? "var(--red)" : "var(--surface)",
-                        borderColor: el.presente ? "var(--red)" : "var(--border-2)",
-                        color: el.presente ? "#fff" : "var(--ink-3)",
-                      }}
-                    >
-                      {el.presente ? "✓" : "–"}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="text-[12.5px] font-medium text-ink">{el.elemento}</div>
-                      <div className="text-[11.5px] leading-snug text-ink-2">{el.hallazgo}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="border-t border-border px-5 py-3">
-                <div className="overline mb-1">Acción recomendada</div>
-                <p className="text-[11.5px] leading-snug text-ink-2">
-                  {sel.r.nivel === "alto"
-                    ? "Formalizar el vínculo laboral o reestructurar la relación para que sea verdaderamente independiente; provisionar la contingencia."
-                    : sel.r.nivel === "medio"
-                    ? "Mitigar y documentar las señales de subordinación; revisar cláusulas y la operación real."
-                    : "Conservar evidencia de independencia (facturas, otros clientes, autonomía de horario y medios propios)."}
-                </p>
-              </div>
-            </Card>
-
-            <div className="hairline flex items-start gap-2 bg-[var(--info-tint)] px-4 py-3">
-              <Flash size={15} color="var(--info)" className="mt-0.5 shrink-0" />
-              <p className="text-[11.5px] leading-snug text-ink-2">
-                Estimación de apoyo. Los montos son aproximados (el área contable y el abogado deben
-                validarlos); la calificación final del contrato realidad corresponde al juez laboral.
-              </p>
-            </div>
           </div>
         </div>
+      </div>
+
+      {/* ── Análisis detallado (a todo el ancho) ── */}
+      <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <Card>
+          <CardHeader
+            overline="Exposición en pesos"
+            title="Desglose de la contingencia"
+            subtitle={`Ventana no prescrita: ${sel.r.exposicion.mesesExpuestos} meses (prescripción 3 años, CST 488–489).`}
+          />
+          <div className="divide-y divide-border">
+            {sel.r.exposicion.rubros.map((ru) => (
+              <div key={ru.concepto} className="px-5 py-3">
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-[12.5px] text-ink">{ru.concepto}</span>
+                  <span className="font-num text-[12.5px] text-ink">{cop(ru.valor)}</span>
+                </div>
+                <div className="mt-0.5 text-[10.5px] text-ink-3">
+                  {ru.detalle} · {ru.norma}
+                </div>
+              </div>
+            ))}
+            <div className="flex items-baseline justify-between gap-3 bg-surface-2 px-5 py-3">
+              <span className="text-[12.5px] font-medium text-ink">Total exposición máxima</span>
+              <span className="font-num text-[13px] font-medium text-ink">
+                {cop(sel.r.exposicion.montoMaximo)}
+              </span>
+            </div>
+          </div>
+        </Card>
+
+        <Card>
+          <CardHeader
+            overline="Concepto legal"
+            title="Elementos del contrato realidad"
+            subtitle="Art. 23 CST: prestación personal + subordinación + remuneración."
+            right={<Judge size={18} color="var(--red)" />}
+          />
+          <div className="divide-y divide-border">
+            {sel.r.conceptoPorElemento.map((el, i) => (
+              <div key={i} className="flex items-start gap-3 px-5 py-3">
+                <span
+                  className="mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center border text-[11px] font-bold leading-none text-white"
+                  style={{
+                    borderRadius: "var(--radius)",
+                    background: el.presente ? "var(--red)" : "var(--surface)",
+                    borderColor: el.presente ? "var(--red)" : "var(--border-2)",
+                    color: el.presente ? "#fff" : "var(--ink-3)",
+                  }}
+                >
+                  {el.presente ? "✓" : "–"}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[12.5px] font-medium text-ink">{el.elemento}</div>
+                  <div className="text-[11.5px] leading-snug text-ink-2">{el.hallazgo}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="border-t border-border px-5 py-3">
+            <div className="overline mb-1">Acción recomendada</div>
+            <p className="text-[11.5px] leading-snug text-ink-2">
+              {sel.r.nivel === "alto"
+                ? "Formalizar el vínculo laboral o reestructurar la relación para que sea verdaderamente independiente; provisionar la contingencia."
+                : sel.r.nivel === "medio"
+                ? "Mitigar y documentar las señales de subordinación; revisar cláusulas y la operación real."
+                : "Conservar evidencia de independencia (facturas, otros clientes, autonomía de horario y medios propios)."}
+            </p>
+          </div>
+        </Card>
+      </div>
+
+      {/* ── Contradicciones contrato ↔ realidad (a todo el ancho) ── */}
+      {sel.r.contradicciones.length > 0 && (
+        <Card className="mt-3">
+          <CardHeader
+            overline="Contrato ↔ realidad"
+            title="Contradicciones detectadas"
+            subtitle="El papel dice una cosa; la operación, otra. Eso es el corazón del dictamen."
+            right={<Warning2 size={18} color="var(--warning)" />}
+          />
+          <div className="grid grid-cols-1 gap-px bg-border md:grid-cols-2">
+            {sel.r.contradicciones.map((cd, i) => (
+              <div key={i} className="bg-surface px-5 py-3">
+                <Badge tone={cd.severidad === "alta" ? "red" : "warning"}>{cd.severidad}</Badge>
+                <p className="mt-1.5 text-[12px] text-ink-2">
+                  <span className="text-ink-3">El contrato dice:</span> {cd.contratoDice}
+                </p>
+                <p className="mt-1 text-[12px] text-ink">
+                  <span className="text-ink-3">La realidad muestra:</span> {cd.realidadMuestra}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          {sel.r.clausulas.length > 0 && (
+            <>
+              <button
+                onClick={() => setVerContrato((v) => !v)}
+                className="flex w-full items-center justify-center gap-1 border-t border-border px-5 py-2.5 text-[11.5px] font-medium text-ink-2 transition-colors hover:bg-surface-2"
+              >
+                {verContrato ? "Ocultar contrato" : "Ver contrato y subrayar lo que se contradice"}
+              </button>
+              {verContrato && (
+                <div className="space-y-2.5 border-t border-border bg-surface-2 px-5 py-4">
+                  <div className="overline">Extracto del contrato (lo que dice el papel)</div>
+                  <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
+                    {sel.r.clausulas.map((cl, i) => (
+                      <div key={i} className="text-[11.5px] leading-relaxed">
+                        <p className={cl.contradicha ? "text-ink" : "text-ink-3"}>
+                          {resaltarFragmento(cl.texto, cl.destacar, cl.contradicha)}
+                        </p>
+                        {cl.contradicha && cl.realidad && (
+                          <p className="mt-0.5 text-[10.5px] text-red-dark">↳ La realidad muestra: {cl.realidad}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <p className="pt-1 text-[10px] leading-snug text-ink-3">
+                    Extracto representativo del clausulado de prestación de servicios. Para un contrato cargado, el
+                    subrayado se aplicaría sobre el texto extraído del documento.
+                  </p>
+                </div>
+              )}
+            </>
+          )}
+        </Card>
+      )}
+
+      <div className="mt-3 hairline flex items-start gap-2 bg-[var(--info-tint)] px-4 py-3">
+        <Flash size={15} color="var(--info)" className="mt-0.5 shrink-0" />
+        <p className="text-[11.5px] leading-snug text-ink-2">
+          Estimación de apoyo. Los montos son aproximados (el área contable y el abogado deben validarlos); la
+          calificación final del contrato realidad corresponde al juez laboral.
+        </p>
       </div>
 
       <style jsx global>{`
@@ -460,6 +498,25 @@ export default function ReclasificacionPage() {
         }
       `}</style>
     </div>
+  );
+}
+
+// Subraya en rojo el fragmento `frag` dentro de `texto` cuando la cláusula está contradicha.
+function resaltarFragmento(texto: string, frag: string, activo: boolean) {
+  if (!activo || !frag) return texto;
+  const i = texto.toLowerCase().indexOf(frag.toLowerCase());
+  if (i < 0) return texto;
+  return (
+    <>
+      {texto.slice(0, i)}
+      <span
+        className="font-medium text-red-dark underline decoration-2 underline-offset-2"
+        style={{ background: "var(--red-tint)", textDecorationColor: "var(--red)" }}
+      >
+        {texto.slice(i, i + frag.length)}
+      </span>
+      {texto.slice(i + frag.length)}
+    </>
   );
 }
 

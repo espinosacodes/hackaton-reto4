@@ -166,7 +166,7 @@ export default function LiquidacionesPage() {
               <div className="flex gap-2">
                 <input
                   inputMode="decimal"
-                  placeholder="Horas/mes"
+                  placeholder="Horas hechas en el mes"
                   value={nuevasHoras}
                   onChange={(e) => setNuevasHoras(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter") agregarNovedad(); }}

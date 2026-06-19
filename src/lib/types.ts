@@ -133,6 +133,15 @@ export interface ContradiccionContrato {
   severidad: "alta" | "media";
 }
 
+// Cláusula del extracto del contrato, para mostrarlo y subrayar lo que se contradice.
+export interface ClausulaContrato {
+  eje: "objeto" | "horario" | "remuneracion" | "exclusividad" | "medios";
+  texto: string; // lo que dice el contrato (el "papel")
+  destacar: string; // fragmento a subrayar dentro de `texto`
+  contradicha: boolean; // la realidad operativa la contradice
+  realidad?: string; // qué muestra la realidad (si está contradicha)
+}
+
 export interface RubroExposicion {
   concepto: string;
   valor: number;
@@ -162,6 +171,7 @@ export interface ReclasificacionResultado {
   algoritmica: boolean; // dispara régimen Ley 2466/2025
   indicios: { senal: string; presente: boolean; peso: number; norma: string; bucket: BucketSenal }[];
   contradicciones: ContradiccionContrato[];
+  clausulas: ClausulaContrato[]; // extracto del contrato con lo contradicho marcado
   exposicion: ExposicionReclasificacion;
   conceptoPorElemento: ConceptoElemento[];
   conclusion: string;

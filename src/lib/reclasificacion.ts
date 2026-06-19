@@ -4,6 +4,7 @@ import {
   SubordinacionSenales,
   BucketSenal,
   ContradiccionContrato,
+  ClausulaContrato,
   ConceptoElemento,
   ExposicionReclasificacion,
 } from "./types";
@@ -196,6 +197,75 @@ function detectarContradicciones(c: Contrato, s: SubordinacionSenales): Contradi
   return out;
 }
 
+// Clausulado típico de un contrato civil de prestación de servicios (extracto):
+// son las "promesas" de independencia que la realidad operativa suele desmentir.
+const CLAUSULAS_BASE: { eje: ClausulaContrato["eje"]; texto: string; destacar: string }[] = [
+  {
+    eje: "objeto",
+    texto:
+      "PRIMERA. Objeto. EL CONTRATISTA prestará sus servicios de forma autónoma e independiente, con plena libertad técnica, administrativa y directiva, sin subordinación ni dependencia respecto de EL CONTRATANTE.",
+    destacar: "sin subordinación ni dependencia",
+  },
+  {
+    eje: "horario",
+    texto:
+      "SEGUNDA. Autonomía. EL CONTRATISTA no estará sujeto a horario ni a jornada de trabajo y organizará su tiempo con plena independencia.",
+    destacar: "no estará sujeto a horario ni a jornada de trabajo",
+  },
+  {
+    eje: "remuneracion",
+    texto:
+      "TERCERA. Honorarios. EL CONTRATANTE pagará honorarios contra la presentación de factura o cuenta de cobro por los entregables efectivamente realizados.",
+    destacar: "contra la presentación de factura o cuenta de cobro",
+  },
+  {
+    eje: "exclusividad",
+    texto:
+      "CUARTA. No exclusividad. EL CONTRATISTA podrá prestar sus servicios a terceros, sin que exista relación de exclusividad con EL CONTRATANTE.",
+    destacar: "podrá prestar sus servicios a terceros",
+  },
+  {
+    eje: "medios",
+    texto:
+      "QUINTA. Medios propios. EL CONTRATISTA ejecutará la labor con sus propios medios, herramientas y equipos, asumiendo los riesgos de su actividad.",
+    destacar: "con sus propios medios, herramientas y equipos",
+  },
+];
+
+/** Extracto del contrato con las cláusulas que la realidad operativa contradice. */
+function evaluarClausulas(c: Contrato, s: SubordinacionSenales): ClausulaContrato[] {
+  if (c.tipo !== "prestacion_servicios" && c.tipo !== "plataforma") return [];
+  const haySubordinacion =
+    s.registraJornada || s.leDefinenHorario || s.reportaAJefe || s.empresaAsignaTareas || s.pidePermisos || s.enOrganigrama;
+  return CLAUSULAS_BASE.map((cl) => {
+    let contradicha = false;
+    let realidad: string | undefined;
+    switch (cl.eje) {
+      case "objeto":
+        contradicha = Boolean(haySubordinacion || s.laborDelGiro);
+        if (contradicha) realidad = "En la práctica la empresa dirige y controla la prestación (subordinación).";
+        break;
+      case "horario":
+        contradicha = Boolean(s.leDefinenHorario || s.registraJornada);
+        if (contradicha) realidad = "Cumple un horario definido por la empresa y/o registra entrada y salida.";
+        break;
+      case "remuneracion":
+        contradicha = Boolean(s.pagoFijoPeriodico);
+        if (contradicha) realidad = "Recibe un pago fijo y periódico, igual que la nómina (no honorarios por entregable).";
+        break;
+      case "exclusividad":
+        contradicha = Boolean(s.exclusividad);
+        if (contradicha) realidad = "Trabaja en exclusividad para la empresa.";
+        break;
+      case "medios":
+        contradicha = Boolean(s.herramientasEmpleador || s.correoEquipoCorporativo);
+        if (contradicha) realidad = "Usa correo, equipos o herramientas de la empresa.";
+        break;
+    }
+    return { ...cl, contradicha, realidad };
+  });
+}
+
 function construirConcepto(s: SubordinacionSenales, algoritmica: boolean): ConceptoElemento[] {
   const subord =
     s.registraJornada || s.leDefinenHorario || s.reportaAJefe || s.empresaAsignaTareas || s.pidePermisos || s.enOrganigrama || algoritmica;
@@ -263,6 +333,7 @@ export function evaluarReclasificacion(
   const probabilidad = Math.min(95, Math.max(5, Math.round(puntaje * 0.9) + (algoritmica ? 5 : 0)));
 
   const contradicciones = detectarContradicciones(c, s);
+  const clausulas = evaluarClausulas(c, s);
   const exposicion = calcularExposicion(c, hoy, params, probabilidad);
   const conceptoPorElemento = construirConcepto(s, algoritmica);
 
@@ -282,6 +353,7 @@ export function evaluarReclasificacion(
     algoritmica,
     indicios,
     contradicciones,
+    clausulas,
     exposicion,
     conceptoPorElemento,
     conclusion,
