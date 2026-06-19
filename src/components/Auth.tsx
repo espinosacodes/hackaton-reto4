@@ -30,6 +30,9 @@ import {
   confirmarReset,
   invitarUsuario,
   loguear,
+  seedDemoCuentas,
+  CUENTAS_DEMO,
+  DEMO_PASSWORD,
 } from "@/lib/cuentas";
 import { EMPRESAS } from "@/lib/data/empresas";
 import { Mark } from "./Logo";
@@ -91,6 +94,12 @@ function LoginScreen() {
           setModo("verificar");
         }
       }
+    });
+
+  const onDemoLogin = (correo: string) =>
+    run(async () => {
+      const r = await iniciarSesion(correo, DEMO_PASSWORD);
+      if (!r.ok) setErr(r.error || "No se pudo iniciar sesión.");
     });
 
   const onActivar = () =>
@@ -172,6 +181,29 @@ function LoginScreen() {
                 <button onClick={() => reset("activar")} className="text-ink-3 hover:text-ink">
                   Activar administrador de la firma
                 </button>
+              </div>
+
+              <div className="mt-4 border-t border-border pt-4">
+                <div className="overline mb-2 text-center">Cuentas de demostración</div>
+                <div className="flex flex-col gap-1">
+                  {CUENTAS_DEMO.map((c) => (
+                    <button
+                      key={c.email}
+                      onClick={() => onDemoLogin(c.email)}
+                      disabled={cargando}
+                      className="hairline flex items-center gap-2 bg-surface px-3 py-2 text-left hover:bg-surface-2 disabled:opacity-50"
+                    >
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[12px] font-medium text-ink">{c.nombre}</span>
+                        <span className="block truncate text-[11px] text-ink-3">{c.email}</span>
+                      </span>
+                      <span className="hairline shrink-0 bg-surface-2 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-ink-2">
+                        {c.rol === "admin" ? "Admin" : "Empleado"}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-2 text-center text-[10px] text-ink-3">Clave de todas: {DEMO_PASSWORD}</p>
               </div>
             </>
           )}
@@ -333,8 +365,8 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   const [montado, setMontado] = useState(false);
 
   useEffect(() => {
-    const marcarMontado = () => setMontado(true);
-    marcarMontado();
+    // Siembra las cuentas de demo (si el navegador está vacío) antes de mostrar el login.
+    seedDemoCuentas().finally(() => setMontado(true));
   }, []);
 
   if (!montado) return null;

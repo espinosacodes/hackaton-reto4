@@ -32,6 +32,17 @@ export interface Cuenta {
   ts: string;
 }
 
+/** Contraseña compartida de las cuentas de demostración. */
+export const DEMO_PASSWORD = "demo1234";
+
+/** Cuentas sembradas para la demo (admins + empleados con distinto acceso). */
+export const CUENTAS_DEMO: { email: string; nombre: string; rol: "admin" | "empleado"; empresas: string[] }[] = [
+  { email: ADMIN_EMAIL, nombre: "Carolina Hurtado", rol: "admin", empresas: [] },
+  { email: "daniel.gandini@hurtadogandini.co", nombre: "Daniel Gandini", rol: "admin", empresas: [] },
+  { email: "ana.gomez@hurtadogandini.co", nombre: "Ana María Gómez", rol: "empleado", empresas: ["emp-demo", "emp-andina"] },
+  { email: "carlos.perez@hurtadogandini.co", nombre: "Carlos Pérez", rol: "empleado", empresas: ["emp-pacifico"] },
+];
+
 interface Reto {
   email: string;
   proposito: "verificacion" | "reset";
@@ -59,6 +70,28 @@ function leerCuentas(): Cuenta[] {
 export function buscarCuenta(email: string): Cuenta | undefined {
   const e = email.trim().toLowerCase();
   return leerCuentas().find((c) => c.email === e);
+}
+
+/** Siembra las cuentas de demo una sola vez (si el navegador no tiene cuentas). */
+export async function seedDemoCuentas(): Promise<void> {
+  if (typeof window === "undefined") return;
+  if (leerCuentas().length > 0) return; // ya hay cuentas (sembradas o reales)
+  const cuentas: Cuenta[] = [];
+  for (const d of CUENTAS_DEMO) {
+    const salt = randHex();
+    const passHash = await hashPassword(DEMO_PASSWORD, salt);
+    cuentas.push({
+      email: d.email.trim().toLowerCase(),
+      nombre: d.nombre,
+      passHash,
+      salt,
+      rol: d.rol,
+      empresas: d.rol === "admin" ? EMPRESAS.map((e) => e.id) : d.empresas,
+      verificado: true,
+      ts: new Date().toISOString(),
+    });
+  }
+  guardar(CUENTAS_KEY, cuentas);
 }
 
 // ── Criptografía (Web Crypto) ────────────────────────────────────────────────
