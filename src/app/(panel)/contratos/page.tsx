@@ -454,7 +454,7 @@ export default function ContratosPage() {
                 c={c}
                 abierto={expandido === c.id}
                 onToggle={() => setExpandido((e) => (e === c.id ? null : c.id))}
-                onDelete={c.fuente === "ia" ? () => eliminarContrato(c) : undefined}
+                onDelete={c.id.startsWith("C-IA") ? () => eliminarContrato(c) : undefined}
               />
             </Reveal>
           ))}
