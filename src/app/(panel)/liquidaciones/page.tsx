@@ -7,9 +7,27 @@ import { Reveal } from "@/components/motion";
 import { liquidar, compararLiquidacion, type ModoLiquidacion } from "@/lib/liquidacion";
 import { calcularRecargo, CONCEPTOS_RECARGO, type TipoHora } from "@/lib/recargos";
 import { useContratosConfirmados, useParametros, useEmpresaActiva, logAudit } from "@/lib/store";
-import { CausaTerminacion } from "@/lib/types";
+import { CausaTerminacion, type Contrato } from "@/lib/types";
 import { cop, fmtDate } from "@/lib/utils";
 import { Calculator, TickCircle, CloseCircle, Warning2, InfoCircle, Clock } from "iconsax-react";
+
+// Marcador usado sólo cuando aún no hay contratos, para que los hooks de cálculo
+// no rompan antes de renderizar el empty state.
+const CONTRATO_PLACEHOLDER: Contrato = {
+  id: "",
+  empleado: "—",
+  documento: "",
+  cargo: "",
+  area: "",
+  tipo: "indefinido",
+  jornada: "completa",
+  horasSemana: 42,
+  salarioMensual: 0,
+  auxilioTransporte: false,
+  salarioIntegral: false,
+  fechaInicio: "2025-01-01",
+  estado: "activo",
+};
 
 const CAUSAS: { value: CausaTerminacion; label: string }[] = [
   { value: "sin_justa_causa", label: "Despido sin justa causa" },
@@ -33,7 +51,10 @@ export default function LiquidacionesPage() {
   const confirmados = useContratosConfirmados();
   const params = useParametros();
   const todos = useMemo(() => [...confirmados, ...CONTRATOS], [confirmados, CONTRATOS]);
-  const contrato = todos.find((c) => c.id === id) ?? todos[0];
+  // Si todavía no hay contratos (empresa nueva o sin extracciones confirmadas),
+  // usamos un marcador para que los cálculos no rompan; abajo se muestra el empty state.
+  const sinContratos = todos.length === 0;
+  const contrato = todos.find((c) => c.id === id) ?? todos[0] ?? CONTRATO_PLACEHOLDER;
 
   // Pasivo acumulado: desde cuándo se adeuda (por defecto, el inicio del contrato).
   const desdeAcum = maxFechaStr(contrato.fechaInicio, desdeDeuda || contrato.fechaInicio);
@@ -86,6 +107,28 @@ export default function LiquidacionesPage() {
 
   const comparacion =
     pagado.trim() !== "" ? compararLiquidacion(liq.total, Number(pagado.replace(/\D/g, ""))) : null;
+
+  if (sinContratos) {
+    return (
+      <div className="mx-auto max-w-6xl">
+        <PageHeader
+          overline="Verificación de prestaciones sociales"
+          title="Liquidador auditable"
+          subtitle="Cálculo 100% determinista de cesantías, intereses, prima, vacaciones e indemnización."
+        />
+        <Card>
+          <div className="flex flex-col items-center gap-3 px-6 py-16 text-center">
+            <Calculator size={40} color="var(--ink-3)" variant="Bulk" />
+            <h3 className="font-head text-[16px] text-ink">No hay contratos para liquidar</h3>
+            <p className="max-w-md text-[13px] text-ink-2">
+              Agrega contratos en la sección de Contratos —manualmente o mediante extracción
+              con IA— y luego vuelve aquí para liquidar prestaciones.
+            </p>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-6xl">
