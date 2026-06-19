@@ -46,7 +46,8 @@ export function DocumentSource({
   onText,
   onBusyChange,
 }: {
-  onText: (texto: string, fuente: string) => void;
+  // archivo: documento ORIGINAL (cuando la fuente lo aporta) para archivarlo en S3.
+  onText: (texto: string, fuente: string, archivo?: File) => void;
   onBusyChange?: (busy: boolean) => void;
 }) {
   const [modo, setModo] = useState<Modo>("archivo");
@@ -58,9 +59,9 @@ export function DocumentSource({
 
   useEffect(() => onBusyChange?.(cargando), [cargando, onBusyChange]);
 
-  function entregar(texto: string, nombre: string) {
+  function entregar(texto: string, nombre: string, archivo?: File) {
     setFuente(nombre);
-    onText(texto, nombre);
+    onText(texto, nombre, archivo);
   }
 
   // ── Archivo local ─────────────────────────────────────────────────────────
@@ -72,7 +73,7 @@ export function DocumentSource({
     setCargando(true);
     try {
       const t = await extractTextFromFile(file);
-      entregar(t, file.name);
+      entregar(t, file.name, file);
     } catch (err) {
       setFuente(null);
       setError(err instanceof FileExtractError ? err.message : "No se pudo procesar el archivo.");
@@ -329,7 +330,7 @@ export function DocumentSource({
                     onKeyDown={(e) => { if (e.key === "Enter") conectarCarpeta(); }}
                   />
                   <Button variant="primary" onClick={conectarCarpeta} disabled={driveBusy}>
-                    <CloudConnection size={14} variant="Bold" /> Conectar
+                    <CloudConnection size={14} color="currentColor" variant="Bold" /> Conectar
                   </Button>
                 </div>
               ) : (
@@ -417,7 +418,7 @@ export function DocumentSource({
           </p>
           <div className="flex gap-2">
             <Button variant="primary" className="flex-1" onClick={guardarConfig}>
-              <TickCircle size={14} variant="Bold" /> Guardar conexión
+              <TickCircle size={14} color="currentColor" variant="Bold" /> Guardar conexión
             </Button>
             {cfg && (
               <Button variant="secondary" onClick={() => { setEditando(false); setError(null); }}>
@@ -465,7 +466,7 @@ export function DocumentSource({
               onKeyDown={(e) => { if (e.key === "Enter") cargarDesdeBucket(); }}
             />
             <Button variant="primary" onClick={cargarDesdeBucket} disabled={cargando}>
-              <CloudConnection size={14} variant="Bold" />
+              <CloudConnection size={14} color="currentColor" variant="Bold" />
               {cargando ? "Cargando…" : "Cargar"}
             </Button>
           </div>

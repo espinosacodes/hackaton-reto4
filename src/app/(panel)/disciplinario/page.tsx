@@ -792,7 +792,7 @@ export default function DisciplinarioPage() {
                     />
                   </label>
                   <Button variant="primary" className="mt-2" onClick={pedirAsesoria} disabled={cargando}>
-                    <Flash size={15} variant="Bold" /> {cargando ? "Analizando…" : "Pedir asesoría a la IA"}
+                    <Flash size={15} color="currentColor" variant="Bold" /> {cargando ? "Analizando…" : "Pedir asesoría a la IA"}
                   </Button>
 
                   {asesoria && !asesoria.error && (
