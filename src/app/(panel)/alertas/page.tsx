@@ -1,13 +1,16 @@
+"use client";
+
 import { PageHeader } from "@/components/AppShell";
 import { Card, Badge, Dot, sevTone, sevLabel, sevColor } from "@/components/ui";
 import { Reveal } from "@/components/motion";
 import { generarAlertas } from "@/lib/alertas";
-import { CONTRATOS, HOY } from "@/lib/data/contratos";
+import { useEmpresaActiva } from "@/lib/store";
 import { ArrowRight2 } from "iconsax-react";
 import Link from "next/link";
 
 export default function AlertasPage() {
-  const alertas = generarAlertas(CONTRATOS, HOY);
+  const empresa = useEmpresaActiva();
+  const alertas = empresa ? generarAlertas(empresa.contratos, empresa.hoy) : [];
   const counts = {
     critica: alertas.filter((a) => a.severidad === "critica").length,
     alta: alertas.filter((a) => a.severidad === "alta").length,

@@ -4,8 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import { PageHeader } from "@/components/AppShell";
 import { Card, CardHeader, Badge, Button } from "@/components/ui";
 import { Reveal } from "@/components/motion";
-import { CONTRATOS } from "@/lib/data/contratos";
-import { useContratosConfirmados, useParametros, logAudit } from "@/lib/store";
+import { useContratosConfirmados, useParametros, useEmpresaActiva, logAudit } from "@/lib/store";
 import { calcularAportes, compararAporte, type ClaseRiesgo, type EstadoAporte } from "@/lib/aportes";
 import { ACCEPTED_FILE_TYPES, extractTextFromFile, FileExtractError } from "@/lib/extract-file";
 import { cop } from "@/lib/utils";
@@ -31,6 +30,8 @@ const estadoLabel: Record<EstadoAporte, string> = {
 };
 
 export default function AportesPage() {
+  const empresa = useEmpresaActiva();
+  const CONTRATOS = useMemo(() => empresa?.contratos ?? [], [empresa]);
   const confirmados = useContratosConfirmados();
   const params = useParametros();
   const [clase, setClase] = useState<ClaseRiesgo>("I");
@@ -38,7 +39,7 @@ export default function AportesPage() {
 
   const trabajadores = useMemo(
     () => [...confirmados, ...CONTRATOS].filter((c) => c.estado === "activo" && LABORALES.includes(c.tipo)),
-    [confirmados]
+    [confirmados, CONTRATOS]
   );
   const aportes = useMemo(
     () => trabajadores.map((c) => calcularAportes(c, params, clase)),

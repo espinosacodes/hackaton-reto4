@@ -4,8 +4,7 @@ import { useMemo, useState } from "react";
 import { PageHeader } from "@/components/AppShell";
 import { Card, CardHeader, Badge } from "@/components/ui";
 import { Reveal } from "@/components/motion";
-import { CONTRATOS, HOY } from "@/lib/data/contratos";
-import { useContratosConfirmados } from "@/lib/store";
+import { useContratosConfirmados, useEmpresaActiva } from "@/lib/store";
 import {
   CONCEPTOS_RECARGO,
   calcularRecargo,
@@ -18,10 +17,14 @@ import { cop } from "@/lib/utils";
 import { Clock, InfoCircle, Health } from "iconsax-react";
 
 export default function RecargosPage() {
-  const confirmados = useContratosConfirmados();
-  const todos = useMemo(() => [...confirmados, ...CONTRATOS], [confirmados]);
+  const empresa = useEmpresaActiva();
+  const CONTRATOS = useMemo(() => empresa?.contratos ?? [], [empresa]);
+  const HOY = empresa?.hoy ?? "2026-06-18";
 
-  const [id, setId] = useState(CONTRATOS[0].id);
+  const confirmados = useContratosConfirmados();
+  const todos = useMemo(() => [...confirmados, ...CONTRATOS], [confirmados, CONTRATOS]);
+
+  const [id, setId] = useState(CONTRATOS[0]?.id ?? "");
   const [tipo, setTipo] = useState<TipoHora>("extra_diurna");
   const [horas, setHoras] = useState("4");
   const [fecha, setFecha] = useState(HOY);

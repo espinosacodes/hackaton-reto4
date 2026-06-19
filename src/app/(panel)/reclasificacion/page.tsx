@@ -4,9 +4,8 @@ import { useMemo, useState } from "react";
 import { PageHeader } from "@/components/AppShell";
 import { Card, CardHeader, Badge, Progress, Button } from "@/components/ui";
 import { Reveal } from "@/components/motion";
-import { CONTRATOS } from "@/lib/data/contratos";
 import { evaluarReclasificacion, INDICIOS } from "@/lib/reclasificacion";
-import { useContratosConfirmados } from "@/lib/store";
+import { useContratosConfirmados, useEmpresaActiva } from "@/lib/store";
 import { SubordinacionSenales } from "@/lib/types";
 import { Cpu, Flash, Judge } from "iconsax-react";
 
@@ -18,13 +17,15 @@ const CLASICOS = INDICIOS.filter((i) => !i.algoritmica);
 const ALGORITMICOS = INDICIOS.filter((i) => i.algoritmica);
 
 export default function ReclasificacionPage() {
+  const empresa = useEmpresaActiva();
+  const CONTRATOS = useMemo(() => empresa?.contratos ?? [], [empresa]);
   const confirmados = useContratosConfirmados();
   const candidatos = useMemo(
     () =>
       [...confirmados, ...CONTRATOS].filter(
         (c) => c.tipo === "prestacion_servicios" || c.tipo === "plataforma"
       ),
-    [confirmados]
+    [confirmados, CONTRATOS]
   );
 
   // Señales editables por contrato (se inicializan con las del dataset).

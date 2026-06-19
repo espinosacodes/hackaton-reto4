@@ -10,20 +10,38 @@
 import { useEffect, useState } from "react";
 import { Contrato } from "./types";
 import { PARAMS_2026 } from "./liquidacion";
+import { EMPRESAS, getEmpresa, type EmpresaCliente } from "./data/empresas";
 
 const AUDIT_KEY = "centinela:auditoria";
 const CONTRATOS_KEY = "centinela:contratos-confirmados";
 const DOCS_KEY = "centinela:documentos-perfil";
 const PARAMS_KEY = "centinela:parametros";
+const USER_KEY = "centinela:usuario";
+const EMPRESA_KEY = "centinela:empresa-activa";
 const EVT = "centinela:store-cambio";
 
 export interface AuditEvento {
   id: string;
   ts: string; // ISO
   usuario: string;
+  email?: string; // correo del usuario autenticado (cadena de custodia)
   accion: string;
   detalle: string;
 }
+
+// Usuario autenticado = empleado de la firma Hurtado Gandini.
+//  - rol "admin": gestiona la firma, invita empleados y ve todas las empresas cliente.
+//  - rol "empleado": solo accede a las empresas cliente que se le asignaron.
+// En la demo se guarda en el navegador; en producción lo respalda un backend + BD.
+export interface Usuario {
+  nombre: string;
+  email: string;
+  rol: "admin" | "empleado";
+  empresas: string[]; // ids de empresas cliente accesibles (admin = todas)
+  ts: string; // momento de inicio de sesión (ISO)
+}
+
+export const FIRMA = "Hurtado Gandini";
 
 // Documento normativo interno cargado una sola vez en el Perfil de la empresa
 // (RIT, manual de convivencia, PTEE, convención, código de ética).
@@ -55,9 +73,22 @@ function uid(): string {
   return `${Date.now()}-${Math.round(Math.random() * 1e6)}`;
 }
 
-/** Registra un evento en la bitácora de auditoría. */
-export function logAudit(accion: string, detalle: string, usuario = "RH (demo)") {
-  const ev: AuditEvento = { id: uid(), ts: new Date().toISOString(), usuario, accion, detalle };
+/**
+ * Registra un evento en la bitácora de auditoría.
+ * Si no se pasa `usuario`, se atribuye al usuario autenticado de la sesión
+ * (quién valida / decide), de modo que cada acción queda firmada por su responsable.
+ */
+export function logAudit(accion: string, detalle: string, usuario?: string) {
+  const actual = getUsuarioActual();
+  const quien = usuario ?? actual?.nombre ?? "RH (demo)";
+  const ev: AuditEvento = {
+    id: uid(),
+    ts: new Date().toISOString(),
+    usuario: quien,
+    email: actual?.email,
+    accion,
+    detalle,
+  };
   const all = read<AuditEvento[]>(AUDIT_KEY, []);
   write(AUDIT_KEY, [ev, ...all].slice(0, 200));
 }
@@ -65,6 +96,62 @@ export function logAudit(accion: string, detalle: string, usuario = "RH (demo)")
 /** Limpia la bitácora de auditoría (útil para reiniciar la demo). */
 export function clearAudit() {
   write(AUDIT_KEY, []);
+}
+
+// ── Sesión de usuario (login con Google) ─────────────────────────────────────
+
+/** Lectura síncrona del usuario autenticado (para usar fuera de React). */
+export function getUsuarioActual(): Usuario | null {
+  return read<Usuario | null>(USER_KEY, null);
+}
+
+/** Inicia sesión: guarda al usuario autenticado y lo deja en la bitácora. */
+export function setUsuario(u: Usuario) {
+  write(USER_KEY, u);
+  logAudit("Inicio de sesión", `${u.nombre} · ${u.email} · ${FIRMA} (${u.rol})`, u.nombre);
+}
+
+/** Cierra sesión (y olvida la empresa activa). */
+export function clearUsuario() {
+  const actual = getUsuarioActual();
+  if (actual) logAudit("Cierre de sesión", `${actual.nombre} · ${actual.email}`, actual.nombre);
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(USER_KEY);
+  localStorage.removeItem(EMPRESA_KEY);
+  window.dispatchEvent(new Event(EVT));
+}
+
+/** Hook reactivo del usuario autenticado (null si no hay sesión). */
+export function useUsuario(): Usuario | null {
+  return useStore<Usuario | null>(USER_KEY, null);
+}
+
+// ── Empresa cliente activa (se trabaja una a la vez) ─────────────────────────
+
+/** Empresas cliente a las que el usuario tiene acceso (admin = todas). */
+export function empresasAccesibles(u: Usuario | null): EmpresaCliente[] {
+  if (!u) return [];
+  if (u.rol === "admin") return EMPRESAS;
+  return EMPRESAS.filter((e) => u.empresas.includes(e.id));
+}
+
+/** Selecciona la empresa cliente activa y lo registra en la bitácora. */
+export function setEmpresaActiva(id: string) {
+  const emp = getEmpresa(id);
+  write(EMPRESA_KEY, id);
+  if (emp) logAudit("Empresa seleccionada", emp.nombre);
+}
+
+export function clearEmpresaActiva() {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(EMPRESA_KEY);
+  window.dispatchEvent(new Event(EVT));
+}
+
+/** Hook con la empresa cliente activa (null si no se ha elegido). */
+export function useEmpresaActiva(): EmpresaCliente | null {
+  const id = useStore<string | null>(EMPRESA_KEY, null);
+  return getEmpresa(id) ?? null;
 }
 
 /** Agrega (o reemplaza por id) un contrato validado por un humano. */
