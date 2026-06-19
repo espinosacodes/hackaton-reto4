@@ -15,8 +15,24 @@ function ext(name: string): string {
 // infinito que se veía con ciertos PDF reales cuyo worker no resolvía nunca).
 const PDF_TIMEOUT_MS = 45_000;
 
+// pdf.js cargado en runtime desde /public, NO empaquetado por el bundler.
+// Importarlo con `import("pdfjs-dist")` hacía que Turbopack lo dividiera en un
+// chunk async que fallaba en dev con ChunkLoadError. El comentario mágico
+// `turbopackIgnore` deja la URL como import nativo del navegador (igual que el
+// worker): se sirve pdf.min.mjs desde /public, copiado de
+// node_modules/pdfjs-dist/build/pdf.min.mjs (mismo número de versión).
+type PdfjsModule = typeof import("pdfjs-dist");
+const PDFJS_URL = "/pdf.min.mjs";
+let pdfjsPromise: Promise<PdfjsModule> | null = null;
+function loadPdfjs(): Promise<PdfjsModule> {
+  // URL en variable (no literal): evita que TS/bundler intenten resolver la ruta
+  // estáticamente; queda como import nativo en runtime.
+  pdfjsPromise ??= import(/* turbopackIgnore: true */ PDFJS_URL) as Promise<PdfjsModule>;
+  return pdfjsPromise;
+}
+
 async function extractPdf(file: File): Promise<string> {
-  const pdfjs = await import("pdfjs-dist");
+  const pdfjs = await loadPdfjs();
   // Worker servido desde /public (estable en Turbopack dev y en Vercel).
   // El archivo se copia de node_modules/pdfjs-dist/build/pdf.worker.min.mjs (mismo número de versión).
   pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
