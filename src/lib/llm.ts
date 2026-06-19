@@ -207,6 +207,73 @@ export async function aconsejarDisciplinario(userPromptText: string): Promise<As
   return { data: parsed.data, provider: cfg.label, model };
 }
 
+// ── Sugerencia de causal (CST art. 62-A) y norma interna a partir de los hechos ─
+// La IA LEE los hechos y propone; el abogado confirma o cambia la preselección.
+
+export const SugerenciaCausalSchema = z.object({
+  causalId: z.string().describe("Id de la causal CST art. 62-A más aplicable (A1..A15), o '' si ninguna encaja"),
+  justificacionCausal: z.string().describe("Por qué esa causal aplica a los hechos, en 1-2 frases"),
+  normaInterna: z.string().describe("Artículo/numeral del reglamento interno (RIT) posiblemente infringido, citando el documento si se proporcionó; '' si no hay base"),
+  justificacionNorma: z.string().describe("Por qué se señala esa norma interna, en 1-2 frases"),
+  alternativas: z.array(z.string()).describe("Ids de otras causales que también podrían aplicar (lista breve)"),
+});
+
+export type SugerenciaCausal = z.infer<typeof SugerenciaCausalSchema>;
+
+export interface SugerenciaCausalResult {
+  data: SugerenciaCausal;
+  provider: string;
+  model: string;
+}
+
+const CAUSAL_SYSTEM = `Eres un asistente jurídico laboralista en Colombia. A partir de UNOS HECHOS imputados a un trabajador, sugieres cuál JUSTA CAUSA del art. 62, literal A, del CST (causales A1 a A15) es la más aplicable y qué norma interna (artículo del Reglamento Interno de Trabajo) podría haberse infringido.
+SOLO sugieres una preselección razonada para que el abogado la confirme o la cambie: NO decides ni tipificas de forma definitiva. Si los documentos internos (RIT) se proporcionan, cita el artículo/numeral concreto; si no, deja la norma interna vacía e indícalo. Sé conservador: si los hechos no encajan claramente en ninguna causal, devuelve causalId vacío.`;
+
+const CAUSAL_JSON_HINT = `Responde ÚNICAMENTE con un objeto JSON válido con esta forma exacta:
+{
+  "causalId": string,
+  "justificacionCausal": string,
+  "normaInterna": string,
+  "justificacionNorma": string,
+  "alternativas": string[]
+}`;
+
+/** Sugiere causal y norma interna a partir de los hechos. Lanza si la API falla. */
+export async function sugerirCausalNorma(userPromptText: string): Promise<SugerenciaCausalResult> {
+  const resolved = resolveProvider();
+  if (!resolved) throw new Error("Sin proveedor: define una API key (ANTHROPIC/OPENAI/DEEPSEEK/GEMINI).");
+  const { cfg } = resolved;
+  const model = process.env.CENTINELA_ADVICE_MODEL ?? process.env.CENTINELA_EXTRACT_MODEL ?? cfg.model;
+
+  if (cfg.kind === "anthropic") {
+    const client = new Anthropic();
+    const res = await client.messages.parse({
+      model,
+      max_tokens: 1024,
+      system: CAUSAL_SYSTEM,
+      messages: [{ role: "user", content: userPromptText }],
+      output_config: { format: zodOutputFormat(SugerenciaCausalSchema) },
+    });
+    if (!res.parsed_output) throw new Error("Respuesta sin parsear");
+    return { data: res.parsed_output, provider: cfg.label, model };
+  }
+
+  const client = new OpenAI({ apiKey: process.env[cfg.keyEnv], baseURL: cfg.baseURL });
+  const completion = await client.chat.completions.create({
+    model,
+    temperature: 0.1,
+    response_format: { type: "json_object" },
+    messages: [
+      { role: "system", content: `${CAUSAL_SYSTEM}\n\n${CAUSAL_JSON_HINT}` },
+      { role: "user", content: userPromptText },
+    ],
+  });
+  const raw = completion.choices[0]?.message?.content ?? "";
+  const parsed = SugerenciaCausalSchema.safeParse(JSON.parse(stripFences(raw)));
+  if (!parsed.success) throw new Error("JSON no cumple el esquema: " + parsed.error.message);
+  return { data: parsed.data, provider: cfg.label, model };
+}
+
 // ── Auditoría del Reglamento Interno de Trabajo (detección de lagunas) ────────
 
 export const AuditoriaRITSchema = z.object({

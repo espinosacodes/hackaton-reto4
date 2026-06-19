@@ -183,6 +183,7 @@ export const ETAPAS: EtapaInfo[] = [
       "Identificación de la conducta y su tipificación en el reglamento o contrato; verificación de que la acción disciplinaria no haya prescrito.",
     norma: "Principio de legalidad — CN art. 29",
     garantias: ["Tipificación de la falta en el RIT/contrato", "Acción disciplinaria no prescrita"],
+    documento: { label: "Generar redacción de hechos (texto)", tipo: "hechos" },
   },
   {
     key: "citacion",
@@ -196,7 +197,7 @@ export const ETAPAS: EtapaInfo[] = [
       "Indicación de la norma infringida",
       "Plazo razonable para preparar la defensa",
     ],
-    documento: { label: "Generar citación a descargos", tipo: "citacion" },
+    documento: { label: "Generar situación de descargos (texto)", tipo: "situacion" },
   },
   {
     key: "descargos",
@@ -257,10 +258,25 @@ export interface CasoDisciplinario {
   reglamentoNombre?: string; // documento fuente (Perfil)
   fechaDiligencia?: string;
   lugarDiligencia?: string;
+  linkDiligencia?: string; // enlace (Zoom/Meet) si la audiencia es virtual — opcional
+  preguntasRespuestas?: string; // preguntas y respuestas de la diligencia de descargos
+  pruebasAportadas?: boolean; // si el trabajador aportó pruebas en la diligencia
+  oportunidadPruebas?: string; // si las pruebas se aportaron oportunamente y su descripción
   decision?: string; // texto de la sanción/archivo
+  tipoNotificacion?: "sancion" | "despido"; // qué notifica: sanción o despido con justa causa
 }
 
 const PIE = "— Documento asistido por Centinela. Requiere revisión y firma del abogado responsable. —";
+
+// Indenta un bloque de texto libre (preguntas/respuestas, descripción de pruebas)
+// para que conserve el formato del documento.
+function indentar(texto: string): string {
+  return texto
+    .trim()
+    .split("\n")
+    .map((l) => `   ${l}`)
+    .join("\n");
+}
 
 function fundamento(c: CasoDisciplinario): string {
   const causal = c.causalTexto ? `   Causal invocada: ${c.causalTexto}\n` : "";
@@ -273,11 +289,61 @@ function fundamento(c: CasoDisciplinario): string {
 
 /** Genera el documento que corresponde a la etapa indicada. */
 export function generarDocumento(tipo: string, c: CasoDisciplinario): string {
+  if (tipo === "hechos") return generarHechos(c);
+  if (tipo === "situacion") return generarSituacionDescargos(c);
   if (tipo === "citacion") return generarCitacion(c);
   if (tipo === "acta") return generarActaDescargos(c);
   if (tipo === "decision") return generarDecision(c);
   if (tipo === "notificacion") return generarNotificacion(c);
   return generarCitacion(c);
+}
+
+/**
+ * Etapa 1 — Redacción de los hechos y la falta presunta, en TEXTO editable.
+ * El abogado lo lee, lo ajusta y luego lo integra a la situación de descargos.
+ */
+export function generarHechos(c: CasoDisciplinario): string {
+  return `HECHOS Y FALTA PRESUNTA (borrador para revisión)
+
+${c.empresa}
+Proceso disciplinario — ${c.empleado} (${c.cargo})
+
+1. RELATO DE LOS HECHOS
+   El día ${c.fechaHechos}: ${c.hechos}
+
+2. FALTA PRESUNTA Y FUNDAMENTO
+${fundamento(c)}
+3. TIPIFICACIÓN (principio de legalidad — CN art. 29)
+   Verifique que la conducta esté tipificada como falta en el RIT o el contrato y que la
+   acción disciplinaria no haya prescrito antes de continuar con la citación a descargos.
+
+${PIE}`;
+}
+
+/**
+ * Etapa 2 — «Situación de descargos» en TEXTO: hechos + falta + fundamento.
+ * Es el cuerpo que se pone en conocimiento del trabajador; la citación formal
+ * (generarCitacion) lo integra junto con la fecha/lugar/enlace de la audiencia.
+ */
+export function generarSituacionDescargos(c: CasoDisciplinario): string {
+  return `SITUACIÓN DE DESCARGOS (texto — revisión del abogado)
+
+${c.empresa}
+Señor(a) ${c.empleado} — ${c.cargo}
+
+Se pone en su conocimiento la siguiente situación, respecto de la cual será oído(a) en diligencia de descargos:
+
+1. HECHOS
+   El día ${c.fechaHechos}: ${c.hechos}
+
+2. FALTA Y FUNDAMENTO NORMATIVO
+${fundamento(c)}
+3. GARANTÍAS
+   En la diligencia podrá rendir su versión y ser oído(a) (CN art. 29), estar acompañado(a)
+   por dos representantes del sindicato o dos compañeros (CST art. 115) y presentar y
+   controvertir las pruebas.
+
+${PIE}`;
 }
 
 export function generarCitacion(c: CasoDisciplinario): string {
@@ -295,7 +361,9 @@ Señor(a) ${c.empleado} — ${c.cargo}
 3. FALTA Y FUNDAMENTO NORMATIVO
 ${fundamento(c)}
 4. CITACIÓN A DESCARGOS
-   Se le cita a diligencia de descargos el ${c.fechaDiligencia ?? "[fecha]"} en ${c.lugarDiligencia ?? "[lugar]"}.
+   Se le cita a diligencia de descargos el ${c.fechaDiligencia ?? "[fecha]"} en ${c.lugarDiligencia ?? "[lugar]"}.${
+     c.linkDiligencia ? `\n   Enlace de la audiencia (virtual): ${c.linkDiligencia}` : ""
+   }
    En ella usted podrá:
    - Rendir su versión y ser oído (CN art. 29).
    - Estar acompañado por dos representantes del sindicato o dos compañeros (CST art. 115).
@@ -312,7 +380,9 @@ export function generarActaDescargos(c: CasoDisciplinario): string {
 
 ${c.empresa}
 Proceso disciplinario — ${c.empleado} (${c.cargo})
-Fecha de la diligencia: ${c.fechaDiligencia ?? "[fecha]"} · Lugar: ${c.lugarDiligencia ?? "[lugar]"}
+Fecha de la diligencia: ${c.fechaDiligencia ?? "[fecha]"} · Lugar: ${c.lugarDiligencia ?? "[lugar]"}${
+    c.linkDiligencia ? ` · Enlace: ${c.linkDiligencia}` : ""
+  }
 
 1. ASISTENTES
    Trabajador: ${c.empleado}
@@ -322,11 +392,17 @@ Fecha de la diligencia: ${c.fechaDiligencia ?? "[fecha]"} · Lugar: ${c.lugarDil
 2. HECHOS PUESTOS EN CONOCIMIENTO
    El día ${c.fechaHechos}: ${c.hechos}
 
-3. VERSIÓN DEL TRABAJADOR (descargos)
-   ____________________________________________________________
+3. PREGUNTAS Y RESPUESTAS / VERSIÓN DEL TRABAJADOR (descargos)
+${c.preguntasRespuestas ? indentar(c.preguntasRespuestas) : "   ____________________________________________________________"}
 
 4. PRUEBAS APORTADAS / CONTROVERTIDAS
-   ____________________________________________________________
+${
+    c.oportunidadPruebas
+      ? indentar(c.oportunidadPruebas)
+      : c.pruebasAportadas === false
+        ? "   El trabajador no aportó pruebas en la diligencia."
+        : "   ____________________________________________________________"
+  }
 
 5. CONSTANCIAS
    Se deja constancia de que se respetó el derecho a ser oído y a estar acompañado.
@@ -362,18 +438,37 @@ ${PIE}`;
 }
 
 export function generarNotificacion(c: CasoDisciplinario): string {
-  return `NOTIFICACIÓN DE DECISIÓN DISCIPLINARIA
+  const esDespido = c.tipoNotificacion === "despido";
+  const titulo = esDespido
+    ? "NOTIFICACIÓN DE TERMINACIÓN DEL CONTRATO CON JUSTA CAUSA"
+    : "NOTIFICACIÓN DE SANCIÓN DISCIPLINARIA";
+  const cuerpo = esDespido
+    ? `Por medio de la presente se le NOTIFICA la decisión de DAR POR TERMINADO su contrato de trabajo
+con JUSTA CAUSA, adoptada dentro del proceso disciplinario relacionado con los hechos del ${c.fechaHechos},
+una vez surtidas la citación, la diligencia de descargos y la valoración de pruebas.
+
+Causa de la terminación:
+${fundamento(c)}
+Decisión: ${c.decision ?? "[resumen de la decisión de terminación con justa causa]"}`
+    : `Por medio de la presente se le NOTIFICA la SANCIÓN DISCIPLINARIA adoptada dentro del proceso
+relacionado con los hechos del ${c.fechaHechos}, una vez surtidas la citación, la diligencia de
+descargos y la valoración de pruebas.
+
+Fundamento:
+${fundamento(c)}
+Decisión: ${c.decision ?? "[resumen de la sanción impuesta]"}`;
+
+  // Cláusula de recursos: SIEMPRE debe informarse la posibilidad de impugnar (CN art. 29).
+  return `${titulo}
 
 ${c.empresa}
 Señor(a) ${c.empleado} — ${c.cargo}
 
-Por medio de la presente se le NOTIFICA la decisión adoptada dentro del proceso disciplinario
-relacionado con los hechos del ${c.fechaHechos}.
+${cuerpo}
 
-Decisión: ${c.decision ?? "[resumen de la decisión]"}
-
-Se le informa que, conforme al Reglamento Interno de Trabajo, podrá interponer los recursos
-correspondientes dentro del término previsto.
+RECURSOS
+   Se le informa que, conforme al Reglamento Interno de Trabajo y al debido proceso (CN art. 29),
+   podrá interponer los recursos o apelaciones que el reglamento prevea dentro del término establecido.
 
 Fecha de notificación: ____________________
 Firma del trabajador (recibido): ____________________
