@@ -15,6 +15,8 @@ import { EMPRESAS, getEmpresa, type EmpresaCliente } from "./data/empresas";
 const AUDIT_KEY = "centinela:auditoria";
 const CONTRATOS_KEY = "centinela:contratos-confirmados";
 const DOCS_KEY = "centinela:documentos-perfil";
+const PLANTILLAS_KEY = "centinela:plantillas-disciplinario";
+const LOGO_KEY = "centinela:logo-empresa";
 const LINEAMIENTOS_KEY = "centinela:tipos-lineamiento";
 const PARAMS_KEY = "centinela:parametros";
 const NIT_KEY = "centinela:nit-empresa";
@@ -162,6 +164,12 @@ export function addContratoConfirmado(c: Contrato) {
   write(CONTRATOS_KEY, [c, ...all.filter((x) => x.id !== c.id)]);
 }
 
+/** Elimina un contrato que un humano agregó (p. ej. cargado por error). */
+export function removeContratoConfirmado(id: string) {
+  const all = read<Contrato[]>(CONTRATOS_KEY, []);
+  write(CONTRATOS_KEY, all.filter((x) => x.id !== id));
+}
+
 function useStore<T>(key: string, fallback: T): T {
   // Inicializador perezoso: lee localStorage de forma síncrona en el primer
   // render del CLIENTE. Así un componente recién montado ya tiene el valor real
@@ -209,6 +217,45 @@ export function removeDocumentoPerfil(id: string) {
 
 export function useDocumentosPerfil(): DocumentoPerfil[] {
   return useStore<DocumentoPerfil[]>(DOCS_KEY, []);
+}
+
+// ── Plantillas de documentos disciplinarios (citación, notificación, etc.) ────
+// La empresa sube su propio formato; al generar el escrito se rellena con el caso
+// y se exporta con su logo, para que salga listo con su letra/estructura.
+
+export interface PlantillaDisciplinaria {
+  tipo: string; // a qué documento aplica: "citacion" | "notificacion" | "decision" | "acta" | ...
+  nombre: string;
+  texto: string;
+  ts: string;
+}
+
+export function addPlantilla(p: PlantillaDisciplinaria) {
+  const all = read<PlantillaDisciplinaria[]>(PLANTILLAS_KEY, []);
+  write(PLANTILLAS_KEY, [p, ...all.filter((x) => x.tipo !== p.tipo)]);
+}
+
+export function removePlantilla(tipo: string) {
+  const all = read<PlantillaDisciplinaria[]>(PLANTILLAS_KEY, []);
+  write(PLANTILLAS_KEY, all.filter((x) => x.tipo !== tipo));
+}
+
+export function usePlantillas(): PlantillaDisciplinaria[] {
+  return useStore<PlantillaDisciplinaria[]>(PLANTILLAS_KEY, []);
+}
+
+// ── Logo de la empresa cliente (para los escritos exportados a PDF) ───────────
+
+export function setLogoEmpresa(dataUrl: string | null) {
+  if (dataUrl) write(LOGO_KEY, dataUrl);
+  else if (typeof window !== "undefined") {
+    localStorage.removeItem(LOGO_KEY);
+    window.dispatchEvent(new Event(EVT));
+  }
+}
+
+export function useLogoEmpresa(): string | null {
+  return useStore<string | null>(LOGO_KEY, null);
 }
 
 // ── Tipos de lineamiento interno (categorías de documentos del Perfil) ────────

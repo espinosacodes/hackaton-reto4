@@ -5,10 +5,11 @@ import { PageHeader } from "@/components/AppShell";
 import { Card, CardHeader, Badge, Button, Progress } from "@/components/ui";
 import { Reveal } from "@/components/motion";
 import { DocumentSource } from "@/components/DocumentSource";
-import { addContratoConfirmado, logAudit, useBusqueda, setBusqueda, useEmpresaActiva } from "@/lib/store";
+import { addContratoConfirmado, removeContratoConfirmado, logAudit, useBusqueda, setBusqueda, useEmpresaActiva, useContratosConfirmados } from "@/lib/store";
+import { obligacionesEmpleador } from "@/lib/aportes";
 import { Contrato } from "@/lib/types";
-import { cop, fmtDate } from "@/lib/utils";
-import { DocumentUpload, Flash, TickCircle, People, Cpu, Warning2, ArrowDown2 } from "iconsax-react";
+import { cop, fmtDate, norm } from "@/lib/utils";
+import { DocumentUpload, Flash, TickCircle, People, Cpu, Warning2, ArrowDown2, Trash, CloseCircle, AddCircle } from "iconsax-react";
 
 const tipoLabel: Record<string, string> = {
   indefinido: "Indefinido",
@@ -43,7 +44,10 @@ El empleador se obliga a pagar seguridad social, prima de servicios, cesantías 
 
 export default function ContratosPage() {
   const empresa = useEmpresaActiva();
-  const CONTRATOS = empresa?.contratos ?? [];
+  // Nómina = contratos semilla de la empresa + los que el revisor confirmó (IA).
+  // Así el contrato que se sube y valida "se queda abajo" en la nómina analizada.
+  const confirmados = useContratosConfirmados();
+  const CONTRATOS = [...confirmados, ...(empresa?.contratos ?? [])];
   const [texto, setTexto] = useState("");
   const [cargando, setCargando] = useState(false);
   const [extraccion, setExtraccion] = useState<Record<string, unknown> | null>(null);
@@ -65,15 +69,41 @@ export default function ContratosPage() {
   const rev = datos ?? extraccion;
 
   // Búsqueda global del encabezado → filtra la nómina mostrada.
-  const q = useBusqueda().trim().toLowerCase();
+  // Tolerante a tildes: "maria" encuentra "María" (se normaliza con `norm`).
+  const qRaw = useBusqueda().trim();
+  const q = norm(qRaw);
   const nomina = q
     ? CONTRATOS.filter((c) =>
-        `${c.empleado} ${c.cargo} ${c.area} ${c.id}`.toLowerCase().includes(q)
+        norm(`${c.empleado} ${c.cargo} ${c.area} ${c.id}`).includes(q)
       )
     : CONTRATOS;
 
   function setCampo(k: string, v: string | number) {
     setDatos((prev) => ({ ...(prev ?? {}), [k]: v }));
+  }
+
+  // Obligaciones periódicas del EMPLEADOR (editables por el revisor).
+  const obligaciones: string[] = Array.isArray(rev?.obligaciones)
+    ? (rev!.obligaciones as string[])
+    : [];
+  function setObligaciones(arr: string[]) {
+    setDatos((prev) => ({ ...(prev ?? {}), obligaciones: arr }));
+  }
+  const [nuevaObl, setNuevaObl] = useState("");
+  function agregarObligacion(texto: string) {
+    const t = texto.trim();
+    if (!t || obligaciones.includes(t)) return;
+    setObligaciones([...obligaciones, t]);
+    setNuevaObl("");
+  }
+  // Sugerencia determinista a partir del tipo de vínculo y el salario (no la "lee" la IA).
+  function sugerirObligaciones() {
+    const sug = obligacionesEmpleador(
+      String(rev?.tipo ?? "indefinido"),
+      Number(rev?.salarioMensual ?? 0),
+      Boolean(rev?.salarioIntegral),
+    );
+    setObligaciones(Array.from(new Set([...obligaciones, ...sug])));
   }
 
   function confirmar() {
@@ -100,10 +130,18 @@ export default function ContratosPage() {
     addContratoConfirmado(nuevo);
     logAudit(
       "Contrato validado",
-      `${nuevo.empleado} (${nuevo.id}) · confianza ${Math.round((nuevo.extraccionConfianza ?? 0) * 100)}% · ${editando ? "con correcciones" : "sin cambios"}`
+      `${nuevo.empleado} (${nuevo.id}) · confianza ${Math.round((nuevo.extraccionConfianza ?? 0) * 100)}% · ${editando ? "con correcciones" : "sin cambios"} · ${obligaciones.length} obligaciones del empleador`
     );
     setConfirmado(new Date().toLocaleString("es-CO"));
     setEditando(false);
+  }
+
+  function eliminarContrato(c: Contrato) {
+    if (typeof window !== "undefined" &&
+        !window.confirm(`¿Eliminar el contrato de ${c.empleado}? Se quitará de la nómina analizada.`)) return;
+    removeContratoConfirmado(c.id);
+    logAudit("Contrato eliminado", `${c.empleado} (${c.id}) · removido de la nómina por el revisor`);
+    setExpandido(null);
   }
 
   function cargarEjemplo() {
@@ -267,16 +305,62 @@ export default function ContratosPage() {
                     <Campo k="Fin" v={String(rev?.fechaFin ?? "") || "—"} />
                   </dl>
                 )}
-                {Array.isArray(extraccion.obligaciones) && (
-                  <div>
-                    <div className="overline mb-1">Obligaciones detectadas</div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {(extraccion.obligaciones as string[]).map((o) => (
-                        <Badge key={o} tone="neutral">{o}</Badge>
-                      ))}
-                    </div>
+                <div>
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="overline">Obligaciones periódicas del empleador</span>
+                    {editando && (
+                      <button
+                        type="button"
+                        onClick={sugerirObligaciones}
+                        className="text-[11px] text-red-dark underline hover:text-ink"
+                        title="Completar con las obligaciones legales según el tipo de vínculo y el salario"
+                      >
+                        Sugerir según ley
+                      </button>
+                    )}
                   </div>
-                )}
+                  {obligaciones.length === 0 && !editando && (
+                    <p className="text-[11.5px] text-ink-3">
+                      Sin obligaciones a cargo del empleador (o no detectadas). Use “Corregir” para añadirlas.
+                    </p>
+                  )}
+                  <div className="flex flex-wrap gap-1.5">
+                    {obligaciones.map((o) => (
+                      <span
+                        key={o}
+                        className="inline-flex items-center gap-1 bg-surface-2 px-2 py-0.5 text-[11.5px] text-ink-2"
+                        style={{ borderRadius: "var(--radius)" }}
+                      >
+                        {o}
+                        {editando && (
+                          <button
+                            type="button"
+                            onClick={() => setObligaciones(obligaciones.filter((x) => x !== o))}
+                            className="text-ink-3 hover:text-red"
+                            aria-label={`Quitar ${o}`}
+                          >
+                            <CloseCircle size={13} />
+                          </button>
+                        )}
+                      </span>
+                    ))}
+                  </div>
+                  {editando && (
+                    <div className="mt-2 flex gap-2">
+                      <input
+                        value={nuevaObl}
+                        onChange={(e) => setNuevaObl(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") agregarObligacion(nuevaObl); }}
+                        placeholder="Añadir obligación del empleador…"
+                        className="flex-1 border border-border-2 bg-surface px-2 py-1 text-[12px] text-ink focus:border-ink focus:outline-none"
+                        style={{ borderRadius: "var(--radius)" }}
+                      />
+                      <Button variant="secondary" onClick={() => agregarObligacion(nuevaObl)}>
+                        <AddCircle size={14} /> Añadir
+                      </Button>
+                    </div>
+                  )}
+                </div>
                 {extraccion.observaciones ? (
                   <div className="hairline bg-[var(--warning-tint)] px-3 py-2 text-[12px] text-ink-2">
                     <span className="font-medium text-ink">Para revisar: </span>
@@ -331,7 +415,7 @@ export default function ContratosPage() {
             onClick={() => setBusqueda("")}
             className="ml-1 text-[11.5px] text-red-dark underline hover:text-ink"
           >
-            Filtrando «{q}» · limpiar
+            Filtrando «{qRaw}» · limpiar
           </button>
         )}
       </div>
@@ -361,7 +445,7 @@ export default function ContratosPage() {
         <div className="divide-y divide-border">
           {nomina.length === 0 && (
             <p className="px-5 py-8 text-center text-[13px] text-ink-3">
-              Ningún vínculo coincide con «{q}».
+              Ningún vínculo coincide con «{qRaw}».
             </p>
           )}
           {nomina.map((c, i) => (
@@ -370,6 +454,7 @@ export default function ContratosPage() {
                 c={c}
                 abierto={expandido === c.id}
                 onToggle={() => setExpandido((e) => (e === c.id ? null : c.id))}
+                onDelete={c.fuente === "ia" ? () => eliminarContrato(c) : undefined}
               />
             </Reveal>
           ))}
@@ -404,7 +489,7 @@ function mockClient(text: string): Record<string, unknown> {
     salarioIntegral: t.includes("integral"),
     fechaInicio: "2025-07-01",
     fechaFin: tipo === "fijo" ? "2026-06-30" : "",
-    obligaciones: ["Pago de seguridad social", "Prima de servicios", "Cesantías", "Vacaciones"],
+    obligaciones: obligacionesEmpleador(tipo, salario, t.includes("integral")),
     confianza: 0.62,
     observaciones:
       "Extracción heurística en navegador (demo estática sin servidor). Con servidor + ANTHROPIC_API_KEY se usa el modelo de IA.",
@@ -495,7 +580,7 @@ function imprimirContrato(c: Contrato) {
   w.print();
 }
 
-function Row({ c, abierto, onToggle }: { c: Contrato; abierto: boolean; onToggle: () => void }) {
+function Row({ c, abierto, onToggle, onDelete }: { c: Contrato; abierto: boolean; onToggle: () => void; onDelete?: () => void }) {
   const [verDoc, setVerDoc] = useState(false);
   const confPct = Math.round((c.extraccionConfianza ?? 0) * 100);
   const confColor = confPct >= 85 ? "var(--success)" : confPct >= 60 ? "var(--warning)" : "var(--red)";
@@ -571,6 +656,16 @@ function Row({ c, abierto, onToggle }: { c: Contrato; abierto: boolean; onToggle
             <Button variant="secondary" onClick={() => imprimirContrato(c)}>
               Descargar PDF
             </Button>
+            {onDelete && (
+              <button
+                type="button"
+                onClick={onDelete}
+                className="ml-auto inline-flex items-center gap-1.5 text-[12px] text-ink-3 transition-colors hover:text-red"
+                title="Quitar este contrato de la nómina (cargado por error)"
+              >
+                <Trash size={14} /> Eliminar de la nómina
+              </button>
+            )}
           </div>
           {verDoc && (
             <div className="mt-2 max-h-80 overflow-y-auto hairline bg-surface-2 px-4 py-3">

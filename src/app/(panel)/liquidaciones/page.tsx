@@ -131,6 +131,11 @@ export default function LiquidacionesPage() {
                   <option value="periodo">Liquidación del periodo (definitiva)</option>
                   <option value="acumulado">Pasivo acumulado (mora total)</option>
                 </select>
+                <p className="mt-1.5 text-[11px] leading-snug text-ink-3">
+                  {modo === "periodo"
+                    ? "Liquidación definitiva: prestaciones del periodo en curso, asumiendo que los periodos anteriores ya se pagaron."
+                    : "Pasivo acumulado: estima TODO lo que se le adeuda al trabajador desde la fecha indicada abajo (útil para medir la contingencia si nunca se pagó)."}
+                </p>
               </Field>
               <Field label="Fecha de retiro">
                 <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className="input" />

@@ -3,7 +3,7 @@
 // Centinela lee los documentos directamente desde ahí. La configuración se
 // guarda localmente en el navegador (demo); en producción viviría por empresa.
 
-export type BucketProvider = "s3" | "gcs" | "azure" | "custom";
+export type BucketProvider = "s3" | "gcs" | "azure" | "drive" | "custom";
 
 export interface BucketConfig {
   provider: BucketProvider;
@@ -18,6 +18,7 @@ export const BUCKET_PROVIDERS: {
   { id: "s3", label: "Amazon S3", hint: "https://mi-bucket.s3.us-east-1.amazonaws.com/" },
   { id: "gcs", label: "Google Cloud Storage", hint: "https://storage.googleapis.com/mi-bucket/" },
   { id: "azure", label: "Azure Blob Storage", hint: "https://micuenta.blob.core.windows.net/contenedor/" },
+  { id: "drive", label: "Google Drive (archivos públicos)", hint: "https://drive.google.com/" },
   { id: "custom", label: "Otra nube / URL propia", hint: "https://archivos.miempresa.com/docs/" },
 ];
 
@@ -94,4 +95,22 @@ export function resolveBucketUrl(cfg: BucketConfig, key: string): string {
 
 export function providerLabel(p: BucketProvider): string {
   return BUCKET_PROVIDERS.find((x) => x.id === p)?.label ?? "Bucket";
+}
+
+/** True si la URL es un enlace a una CARPETA de Google Drive (no descargable por archivo). */
+export function esCarpetaDrive(url: string): boolean {
+  return /drive\.google\.com\/.*\/folders\//i.test(url) || /drive\.google\.com\/drive\/folders\//i.test(url);
+}
+
+/**
+ * Convierte un enlace de ARCHIVO de Google Drive a su URL de descarga directa.
+ * Acepta formatos `/file/d/<ID>/view` y `?id=<ID>`. Si no es Drive, devuelve la URL igual.
+ * (Requiere que el archivo esté compartido como "cualquiera con el enlace".)
+ */
+export function driveDirectUrl(url: string): string {
+  const m = url.match(/\/file\/d\/([\w-]+)/) || url.match(/[?&]id=([\w-]+)/);
+  if (m && /drive\.google\.com|docs\.google\.com/i.test(url)) {
+    return `https://drive.google.com/uc?export=download&id=${m[1]}`;
+  }
+  return url;
 }

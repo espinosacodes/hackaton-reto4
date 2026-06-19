@@ -32,14 +32,16 @@ const estadoLabel: Record<EstadoAporte, string> = {
 };
 
 // Calendario de obligaciones del empleador (fechas límite recurrentes en Colombia).
-const OBLIGACIONES: { nombre: string; md: string; periodicidad: string; norma: string }[] = [
-  { nombre: "Intereses a las cesantías (al trabajador)", md: "01-31", periodicidad: "Anual", norma: "Ley 52/1975" },
-  { nombre: "Consignación de cesantías al fondo", md: "02-14", periodicidad: "Anual", norma: "Ley 50/1990" },
-  { nombre: "Dotación — 1ª entrega", md: "04-30", periodicidad: "3 veces/año", norma: "Ley 11/1984 (≤2 SMMLV)" },
-  { nombre: "Prima de servicios — 1er semestre", md: "06-30", periodicidad: "Semestral", norma: "CST art. 306" },
-  { nombre: "Dotación — 2ª entrega", md: "08-31", periodicidad: "3 veces/año", norma: "Ley 11/1984 (≤2 SMMLV)" },
-  { nombre: "Prima de servicios — 2do semestre", md: "12-20", periodicidad: "Semestral", norma: "CST art. 306" },
-  { nombre: "Dotación — 3ª entrega", md: "12-20", periodicidad: "3 veces/año", norma: "Ley 11/1984 (≤2 SMMLV)" },
+const DOTACION_DESC =
+  "Vestuario y calzado de labor. Es una obligación de la empresa (no un aporte a la seguridad social) para trabajadores que ganen hasta 2 SMMLV: 3 entregas al año (Ley 11/1984).";
+const OBLIGACIONES: { nombre: string; md: string; periodicidad: string; norma: string; desc?: string }[] = [
+  { nombre: "Intereses a las cesantías (al trabajador)", md: "01-31", periodicidad: "Anual", norma: "Ley 52/1975", desc: "12% anual sobre las cesantías, pagados directamente al trabajador." },
+  { nombre: "Consignación de cesantías al fondo", md: "02-14", periodicidad: "Anual", norma: "Ley 50/1990", desc: "Las cesantías del año anterior se consignan al fondo del trabajador antes del 14 de febrero." },
+  { nombre: "Dotación — 1ª entrega", md: "04-30", periodicidad: "3 veces/año", norma: "Ley 11/1984 (≤2 SMMLV)", desc: DOTACION_DESC },
+  { nombre: "Prima de servicios — 1er semestre", md: "06-30", periodicidad: "Semestral", norma: "CST art. 306", desc: "Un salario mensual al año, pagado en dos cuotas (jun y dic)." },
+  { nombre: "Dotación — 2ª entrega", md: "08-31", periodicidad: "3 veces/año", norma: "Ley 11/1984 (≤2 SMMLV)", desc: DOTACION_DESC },
+  { nombre: "Prima de servicios — 2do semestre", md: "12-20", periodicidad: "Semestral", norma: "CST art. 306", desc: "Segunda cuota de la prima de servicios (máximo 20 de diciembre)." },
+  { nombre: "Dotación — 3ª entrega", md: "12-20", periodicidad: "3 veces/año", norma: "Ley 11/1984 (≤2 SMMLV)", desc: DOTACION_DESC },
 ];
 
 // Próxima ocurrencia (este año si aún no pasa, si no el siguiente) + días restantes.
@@ -167,10 +169,14 @@ export default function AportesPage() {
         </div>
         <div className="divide-y divide-border">
           {calendario.map((o) => (
-            <div key={o.nombre} className="flex items-center justify-between gap-3 px-5 py-2.5 text-[12.5px]">
+            <div key={o.nombre} className="flex items-center justify-between gap-3 px-5 py-2.5 text-[12.5px]" title={o.desc}>
               <div className="min-w-0">
-                <div className="font-medium text-ink">{o.nombre}</div>
+                <div className="flex items-center gap-1.5 font-medium text-ink">
+                  {o.nombre}
+                  {o.desc && <InfoCircle size={12} color="var(--ink-3)" />}
+                </div>
                 <div className="font-num text-[10.5px] text-ink-3">{o.periodicidad} · {o.norma}</div>
+                {o.desc && <div className="mt-0.5 text-[11px] leading-snug text-ink-2">{o.desc}</div>}
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <span className="font-num text-[11.5px] text-ink-2">{fmtDate(o.fecha)}</span>

@@ -16,7 +16,9 @@
   /* Ink (content) */
   --ink: #1c1917;
   --ink-2: #57534e;
-  --ink-3: #a8a29e;
+  /* Texto terciario: stone-500 en vez de stone-400 para mejor legibilidad
+     (la operación pidió textos menos claros / más visibles). */
+  --ink-3: #79716b;
 
   /* Borders — hairline, replace shadows */
   --border: #e7e5e4;

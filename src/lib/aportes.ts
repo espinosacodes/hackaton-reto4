@@ -96,6 +96,52 @@ export function calcularAportes(
   return { contratoId: c.id, empleado: c.empleado, ibc: round(ibc), lineas, totalSeguridadSocial, totalProvisiones };
 }
 
+/**
+ * Obligaciones PERIÓDICAS DEL EMPLEADOR derivadas del vínculo (cálculo determinista,
+ * no lo "lee" la IA). Es la lista que la operación esperaba en Contratos: prestaciones
+ * y aportes a cargo del empleador según el tipo de vínculo y el salario.
+ */
+export function obligacionesEmpleador(
+  tipo: string,
+  salarioMensual: number,
+  salarioIntegral: boolean,
+  p: Params = PARAMS_2026,
+): string[] {
+  // Vínculos civiles: la carga prestacional NO está a cargo del contratante.
+  if (tipo === "prestacion_servicios") {
+    return [
+      "El contratista asume su propia seguridad social (no hay prestaciones a cargo del contratante)",
+      "Verificar realidad del vínculo (riesgo de subordinación encubierta)",
+    ];
+  }
+  if (tipo === "plataforma") {
+    return [
+      "Afiliación a seguridad social según Ley 2466/2025 (esquema mixto)",
+      "Aportes ARL por la actividad",
+    ];
+  }
+
+  const bajo2Smmlv = salarioMensual <= 2 * p.smmlv;
+  const obl = ["Seguridad social: salud, pensión y ARL (PILA, mensual)"];
+  // Exoneración Ley 1607/2012: salud/SENA/ICBF para trabajadores < 10 SMMLV.
+  obl.push(
+    salarioMensual < 10 * p.smmlv
+      ? "Aportes parafiscales: Caja de Compensación (SENA/ICBF exonerados < 10 SMMLV)"
+      : "Aportes parafiscales: SENA, ICBF y Caja de Compensación",
+  );
+  if (!salarioIntegral) {
+    obl.push(
+      "Prima de servicios (jun y dic)",
+      "Cesantías (consignación 14-feb)",
+      "Intereses a las cesantías (pago al trabajador, ene)",
+    );
+  }
+  obl.push("Vacaciones (15 días/año)");
+  if (bajo2Smmlv && !salarioIntegral) obl.push("Auxilio de transporte");
+  if (bajo2Smmlv) obl.push("Dotación (3 entregas/año, Ley 11/1984)");
+  return obl;
+}
+
 export type EstadoAporte = "ok" | "no_pagado" | "subaporte" | "sobreaporte";
 
 /** Compara lo debido contra lo efectivamente pagado (de la planilla, API o manual). */

@@ -8,7 +8,9 @@ import { evaluarReclasificacion, SENALES } from "@/lib/reclasificacion";
 import { useContratosConfirmados, useEmpresaActiva, useParametros, logAudit } from "@/lib/store";
 import { SubordinacionSenales } from "@/lib/types";
 import { cop, copShort } from "@/lib/utils";
-import { Cpu, Flash, Judge, Danger, ArrowRight2, Warning2 } from "iconsax-react";
+import { generarContratoLaboral } from "@/lib/contrato-gen";
+import { imprimirDocumento } from "@/lib/imprimir";
+import { Cpu, Flash, Judge, Danger, ArrowRight2, Warning2, DocumentText } from "iconsax-react";
 
 const nivelTone = { alto: "red", medio: "warning", bajo: "success" } as const;
 const nivelColor = { alto: "var(--red)", medio: "var(--warning)", bajo: "var(--success)" } as const;
@@ -20,6 +22,7 @@ const ALGORITMICOS = SENALES.filter((s) => s.bucket === "algoritmica");
 
 export default function ReclasificacionPage() {
   const empresa = useEmpresaActiva();
+  const EMPRESA = empresa?.nombre ?? "—";
   const params = useParametros();
   const hoy = empresa?.hoy ?? "2026-06-18";
   const CONTRATOS = useMemo(() => empresa?.contratos ?? [], [empresa]);
@@ -413,6 +416,22 @@ export default function ReclasificacionPage() {
                 ? "Mitigar y documentar las señales de subordinación; revisar cláusulas y la operación real."
                 : "Conservar evidencia de independencia (facturas, otros clientes, autonomía de horario y medios propios)."}
             </p>
+            {sel.r.nivel !== "bajo" && (
+              <Button
+                variant="primary"
+                className="mt-3 w-full"
+                onClick={() => {
+                  imprimirDocumento(
+                    generarContratoLaboral(sel.c, EMPRESA),
+                    `Contrato laboral — ${sel.c.empleado}`,
+                    EMPRESA,
+                  );
+                  logAudit("Borrador de contrato laboral generado", `${sel.c.empleado} (${sel.c.id}) · tras reclasificación riesgo ${sel.r.nivel}`);
+                }}
+              >
+                <DocumentText size={15} variant="Bold" /> Generar contrato laboral (borrador)
+              </Button>
+            )}
           </div>
         </Card>
       </div>

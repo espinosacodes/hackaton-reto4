@@ -12,6 +12,8 @@ import {
   BUCKET_PROVIDERS,
   BucketProvider,
   clearBucketConfig,
+  driveDirectUrl,
+  esCarpetaDrive,
   getBucketSnapshot,
   normalizeBaseUrl,
   providerLabel,
@@ -130,9 +132,16 @@ export function DocumentSource({
       return;
     }
     setError(null);
+    const resuelta = resolveBucketUrl(cfg, clave);
+    if (esCarpetaDrive(resuelta)) {
+      setError(
+        "Ese es un enlace de CARPETA de Drive: no se puede leer un archivo desde ahí. Abra el documento en Drive, use “Compartir → Cualquiera con el enlace” y pegue el enlace del ARCHIVO.",
+      );
+      return;
+    }
+    const url = driveDirectUrl(resuelta);
     setCargando(true);
     try {
-      const url = resolveBucketUrl(cfg, clave);
       const t = await extractTextFromUrl(url);
       entregar(t, clave.trim());
     } catch (err) {
@@ -245,19 +254,29 @@ export function DocumentSource({
                 <div className="truncate font-mono text-[11px] text-ink-3">{cfg!.baseUrl}</div>
               </div>
             </div>
-            <div className="flex shrink-0 gap-1">
+            <div className="flex shrink-0 items-center gap-2">
               <button onClick={abrirEdicion} title="Editar conexión" className="text-ink-3 hover:text-ink">
                 <Setting2 size={16} />
               </button>
-              <button onClick={desconectar} title="Desconectar bucket" className="text-ink-3 hover:text-red">
-                <CloseCircle size={16} />
+              <button
+                onClick={desconectar}
+                title="Quitar la conexión del bucket"
+                className="inline-flex items-center gap-1 text-[11.5px] text-ink-3 hover:text-red"
+              >
+                <CloseCircle size={14} /> Quitar
               </button>
             </div>
           </div>
+          {cfg!.provider === "drive" && (
+            <p className="text-[11px] text-ink-3">
+              Pegue el enlace del <span className="font-medium">archivo</span> de Drive (no de la carpeta),
+              compartido como “Cualquiera con el enlace”.
+            </p>
+          )}
           <div className="flex gap-2">
             <input
               className="ds-field font-mono"
-              placeholder="ruta/del/documento.pdf"
+              placeholder={cfg!.provider === "drive" ? "https://drive.google.com/file/d/…/view" : "ruta/del/documento.pdf"}
               value={clave}
               onChange={(e) => setClave(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") cargarDesdeBucket(); }}
