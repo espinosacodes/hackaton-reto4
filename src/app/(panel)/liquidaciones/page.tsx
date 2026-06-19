@@ -25,6 +25,7 @@ export default function LiquidacionesPage() {
   const [causa, setCausa] = useState<CausaTerminacion>("sin_justa_causa");
   const [modo, setModo] = useState<ModoLiquidacion>("periodo");
   const [hasta, setHasta] = useState(HOY);
+  const [desdeDeuda, setDesdeDeuda] = useState("");
   const [pagado, setPagado] = useState<string>("");
   // Guardamos la "firma" del caso enviado; el mensaje se oculta solo al cambiar el caso.
   const [enviadoKey, setEnviadoKey] = useState<string | null>(null);
@@ -34,12 +35,20 @@ export default function LiquidacionesPage() {
   const todos = useMemo(() => [...confirmados, ...CONTRATOS], [confirmados, CONTRATOS]);
   const contrato = todos.find((c) => c.id === id) ?? todos[0];
 
-  // Horas extra / recargos del periodo → factor salarial variable de la liquidación.
+  // Pasivo acumulado: desde cuándo se adeuda (por defecto, el inicio del contrato).
+  const desdeAcum = maxFechaStr(contrato.fechaInicio, desdeDeuda || contrato.fechaInicio);
+  const mesesAdeudados = modo === "acumulado" ? mesesEntreStr(desdeAcum, hasta) : 1;
+
+  // Horas extra / recargos → factor salarial variable de la liquidación.
+  // En "acumulado" se registra el detalle MES A MES (las horas pueden variar entre
+  // meses); el promedio sobre los meses adeudados entra a la base prestacional (CST 127).
   const idRef = useRef(1);
   const [nuevoTipo, setNuevoTipo] = useState<TipoHora>("extra_diurna");
   const [nuevasHoras, setNuevasHoras] = useState("");
-  const [novedades, setNovedades] = useState<{ id: number; tipo: TipoHora; horas: string }[]>([]);
-  const factorVariable = useMemo(
+  const [nuevoMes, setNuevoMes] = useState("");
+  const [novedades, setNovedades] = useState<{ id: number; tipo: TipoHora; horas: string; mes: string }[]>([]);
+
+  const sumaHorasExtra = useMemo(
     () =>
       novedades.reduce((s, n) => {
         const h = Number(n.horas.replace(/[^\d.]/g, "")) || 0;
@@ -47,18 +56,27 @@ export default function LiquidacionesPage() {
       }, 0),
     [novedades, contrato, hasta]
   );
+  // Total de horas extra registradas (acumulado) y promedio mensual que entra a la base.
+  const totalHorasExtra = modo === "acumulado" ? Math.round(sumaHorasExtra) : 0;
+  const factorVariable =
+    modo === "acumulado"
+      ? Math.round(sumaHorasExtra / Math.max(1, mesesAdeudados))
+      : Math.round(sumaHorasExtra);
+
   function agregarNovedad() {
     const h = Number(nuevasHoras.replace(/[^\d.]/g, "")) || 0;
     if (h <= 0) return;
-    setNovedades((prev) => [...prev, { id: idRef.current++, tipo: nuevoTipo, horas: nuevasHoras }]);
+    const mes = modo === "acumulado" ? nuevoMes || hasta.slice(0, 7) : "";
+    setNovedades((prev) => [...prev, { id: idRef.current++, tipo: nuevoTipo, horas: nuevasHoras, mes }]);
     setNuevasHoras("");
+    setNuevoMes("");
   }
 
   const liq = useMemo(
-    () => liquidar(contrato, hasta, causa, params, modo, factorVariable),
-    [contrato, hasta, causa, modo, params, factorVariable]
+    () => liquidar(contrato, hasta, causa, params, modo, factorVariable, modo === "acumulado" ? desdeAcum : undefined),
+    [contrato, hasta, causa, modo, params, factorVariable, desdeAcum]
   );
-  const casoKey = `${contrato.id}|${causa}|${modo}|${hasta}|${factorVariable}`;
+  const casoKey = `${contrato.id}|${causa}|${modo}|${hasta}|${desdeAcum}|${factorVariable}`;
 
   const comparacion =
     pagado.trim() !== "" ? compararLiquidacion(liq.total, Number(pagado.replace(/\D/g, ""))) : null;
@@ -118,6 +136,30 @@ export default function LiquidacionesPage() {
                 <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className="input" />
               </Field>
 
+              {modo === "acumulado" && (
+                <div>
+                  <Field label="Se le debe desde">
+                    <input
+                      type="date"
+                      value={desdeDeuda || contrato.fechaInicio}
+                      min={contrato.fechaInicio}
+                      max={hasta}
+                      onChange={(e) => setDesdeDeuda(e.target.value)}
+                      className="input"
+                    />
+                  </Field>
+                  <p className="mt-1 text-[11px] text-ink-3">
+                    Por defecto, desde el inicio del contrato.{" "}
+                    <span className="font-medium text-ink-2">{mesesAdeudados} mes(es)</span> adeudado(s).
+                    {desdeDeuda && desdeDeuda !== contrato.fechaInicio && (
+                      <button onClick={() => setDesdeDeuda("")} className="ml-1 text-red-dark underline hover:text-ink">
+                        usar inicio del contrato
+                      </button>
+                    )}
+                  </p>
+                </div>
+              )}
+
               <div className="hairline bg-surface-2 px-3 py-3 text-[12px] text-ink-2">
                 <Row k="Tipo de contrato" v={tipoLabel(contrato.tipo)} />
                 <Row k="Salario mensual" v={cop(contrato.salarioMensual)} />
@@ -152,7 +194,9 @@ export default function LiquidacionesPage() {
             />
             <div className="space-y-2.5 px-5 py-4">
               <p className="text-[11px] text-ink-3">
-                Promedio mensual de horas extra/recargos. Es salario (CST art. 127) y entra a la base de las prestaciones.
+                {modo === "acumulado"
+                  ? "Registra las horas extra de cada mes (pueden variar). El promedio sobre los meses adeudados entra a la base prestacional (CST art. 127)."
+                  : "Promedio mensual de horas extra/recargos. Es salario (CST art. 127) y entra a la base de las prestaciones."}
               </p>
               <select
                 value={nuevoTipo}
@@ -163,10 +207,21 @@ export default function LiquidacionesPage() {
                   <option key={x.key} value={x.key}>{x.label}</option>
                 ))}
               </select>
+              {modo === "acumulado" && (
+                <input
+                  type="month"
+                  value={nuevoMes || hasta.slice(0, 7)}
+                  min={desdeAcum.slice(0, 7)}
+                  max={hasta.slice(0, 7)}
+                  onChange={(e) => setNuevoMes(e.target.value)}
+                  className="input"
+                  aria-label="Mes de las horas extra"
+                />
+              )}
               <div className="flex gap-2">
                 <input
                   inputMode="decimal"
-                  placeholder="Horas hechas en el mes"
+                  placeholder={modo === "acumulado" ? "Horas extra de ese mes" : "Horas hechas en el mes"}
                   value={nuevasHoras}
                   onChange={(e) => setNuevasHoras(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter") agregarNovedad(); }}
@@ -174,33 +229,51 @@ export default function LiquidacionesPage() {
                 />
                 <Button variant="secondary" onClick={agregarNovedad}>Agregar</Button>
               </div>
+              {modo === "acumulado" && (
+                <p className="text-[10.5px] text-ink-3">
+                  Agrega un registro por cada mes con horas extra; los meses sin registro cuentan como 0 en el promedio ({mesesAdeudados} meses adeudados).
+                </p>
+              )}
 
               {novedades.length > 0 && (
                 <div className="hairline divide-y divide-border">
-                  {novedades.map((n) => {
-                    const h = Number(n.horas.replace(/[^\d.]/g, "")) || 0;
-                    const r = calcularRecargo(contrato.salarioMensual, n.tipo, h, hasta, contrato.horasSemana);
-                    return (
-                      <div key={n.id} className="flex items-center gap-2 px-3 py-1.5 text-[11.5px]">
-                        <span className="min-w-0 flex-1 truncate text-ink-2">{r.label} · {h} h</span>
-                        <span className="font-num text-ink">{cop(r.total)}</span>
-                        <button
-                          onClick={() => setNovedades((prev) => prev.filter((x) => x.id !== n.id))}
-                          className="text-ink-3 hover:text-red"
-                          aria-label="Quitar"
-                        >
-                          <CloseCircle size={14} />
-                        </button>
-                      </div>
-                    );
-                  })}
+                  {[...novedades]
+                    .sort((a, b) => (modo === "acumulado" ? a.mes.localeCompare(b.mes) : 0))
+                    .map((n) => {
+                      const h = Number(n.horas.replace(/[^\d.]/g, "")) || 0;
+                      const r = calcularRecargo(contrato.salarioMensual, n.tipo, h, hasta, contrato.horasSemana);
+                      return (
+                        <div key={n.id} className="flex items-center gap-2 px-3 py-1.5 text-[11.5px]">
+                          <span className="min-w-0 flex-1 truncate text-ink-2">
+                            {modo === "acumulado" && n.mes ? `${mesLabel(n.mes)} · ` : ""}
+                            {r.label} · {h} h
+                          </span>
+                          <span className="font-num text-ink">{cop(r.total)}</span>
+                          <button
+                            onClick={() => setNovedades((prev) => prev.filter((x) => x.id !== n.id))}
+                            className="text-ink-3 hover:text-red"
+                            aria-label="Quitar"
+                          >
+                            <CloseCircle size={14} />
+                          </button>
+                        </div>
+                      );
+                    })}
                 </div>
               )}
 
               {factorVariable > 0 && (
                 <div className="flex items-center justify-between border-t border-border pt-2 text-[12.5px]">
-                  <span className="font-medium text-ink">Factor mensual → base</span>
+                  <span className="font-medium text-ink">
+                    {modo === "acumulado" ? "Promedio mensual → base" : "Factor mensual → base"}
+                  </span>
                   <span className="font-num text-ink">{cop(factorVariable)}</span>
+                </div>
+              )}
+              {modo === "acumulado" && totalHorasExtra > 0 && (
+                <div className="flex items-center justify-between text-[11.5px] text-ink-2">
+                  <span>Total horas extra del periodo</span>
+                  <span className="font-num">{cop(totalHorasExtra)}</span>
                 </div>
               )}
               {contrato.salarioIntegral && novedades.length > 0 && (
@@ -221,7 +294,7 @@ export default function LiquidacionesPage() {
 
         {/* Result */}
         <div className="lg:col-span-2">
-          <Reveal key={`${id}${causa}${hasta}${modo}${factorVariable}`}>
+          <Reveal key={`${id}${causa}${hasta}${modo}${desdeAcum}${factorVariable}`}>
             <Card>
               <CardHeader
                 overline="Resultado"
@@ -350,6 +423,24 @@ function VerdictCard({ estado, diferencia, pct }: { estado: string; diferencia: 
       </div>
     </Card>
   );
+}
+
+// Mayor de dos fechas yyyy-mm-dd (sin parsear a Date).
+function maxFechaStr(a: string, b: string): string {
+  return a > b ? a : b;
+}
+// Meses completos entre dos fechas yyyy-mm-dd (mínimo 1).
+function mesesEntreStr(desde: string, hasta: string): number {
+  const [ay, am] = desde.split("-").map(Number);
+  const [by, bm] = hasta.split("-").map(Number);
+  return Math.max(1, (by - ay) * 12 + (bm - am));
+}
+
+// "2026-06" → "jun 2026"
+const MESES_ABBR = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+function mesLabel(m: string): string {
+  const [y, mm] = m.split("-");
+  return `${MESES_ABBR[Number(mm) - 1] ?? mm} ${y}`;
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {

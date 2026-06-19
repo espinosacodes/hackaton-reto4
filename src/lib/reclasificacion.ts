@@ -39,21 +39,27 @@ export interface SenalRealidad {
 export const SENALES: SenalRealidad[] = [
   // ── Datos objetivos (la empresa ya los tiene) ──
   { key: "pagoFijoPeriodico", pregunta: "Le pagan el mismo monto el mismo día cada mes (igual que la nómina)", bucket: "dato_objetivo", elemento: "Remuneración", peso: 16, norma: "CST art. 23.c" },
+  { key: "pagosPrestacionales", pregunta: "Recibe primas, bonos, auxilios o vacaciones pagadas", bucket: "dato_objetivo", elemento: "Remuneración", peso: 12, norma: "CST arts. 127, 306" },
   { key: "registraJornada", pregunta: "Registra entrada y salida (control de asistencia / biométrico)", bucket: "dato_objetivo", elemento: "Subordinación", peso: 14, norma: "CST art. 23.b" },
   { key: "enOrganigrama", pregunta: "Aparece en el organigrama o en evaluaciones de desempeño", bucket: "dato_objetivo", elemento: "Subordinación", peso: 12, norma: "CST art. 23.b" },
   { key: "exclusividad", pregunta: "Trabaja solo para la empresa (sin otros clientes)", bucket: "dato_objetivo", elemento: "Exclusividad", peso: 12, norma: "CST art. 23" },
-  { key: "correoEquipoCorporativo", pregunta: "Tiene correo, usuario o equipos de la empresa", bucket: "dato_objetivo", elemento: "Ajenidad", peso: 10, norma: "CST art. 23" },
+  { key: "correoEquipoCorporativo", pregunta: "Tiene correo, usuario o carné corporativo de la empresa", bucket: "dato_objetivo", elemento: "Ajenidad", peso: 10, norma: "CST art. 23" },
   { key: "continuidad", pregunta: "Lleva años seguidos prestando el servicio (relación prolongada)", bucket: "dato_objetivo", elemento: "Continuidad", peso: 10, norma: "CST art. 23.c" },
+  { key: "facturaViaTercero", pregunta: "Factura a través de una SAS o empresa creada para este contrato", bucket: "dato_objetivo", elemento: "Simulación", peso: 8, norma: "Ley 1819/2016; UGPP" },
   // ── Cuestionario operativo neutral (hechos que responde RRHH) ──
+  { key: "prestacionPersonal", pregunta: "Debe prestar el servicio personalmente (no puede enviar un reemplazo ni subcontratar)", bucket: "cuestionario", elemento: "Actividad personal", peso: 10, norma: "CST art. 23.a" },
   { key: "leDefinenHorario", pregunta: "La empresa le define el horario de trabajo", bucket: "cuestionario", elemento: "Subordinación", peso: 12, norma: "CST art. 23.b" },
   { key: "reportaAJefe", pregunta: "Reporta a un jefe que le da instrucciones", bucket: "cuestionario", elemento: "Subordinación", peso: 12, norma: "CST art. 23.b" },
-  { key: "empresaAsignaTareas", pregunta: "Le indican qué hacer, cómo y cuándo", bucket: "cuestionario", elemento: "Subordinación", peso: 10, norma: "CST art. 23.b" },
+  { key: "empresaAsignaTareas", pregunta: "Le asignan las tareas a realizar (qué hacer)", bucket: "cuestionario", elemento: "Subordinación", peso: 8, norma: "CST art. 23.b" },
+  { key: "controlMetodo", pregunta: "Le indican el método o procedimiento para ejecutar la labor (cómo hacerla)", bucket: "cuestionario", elemento: "Subordinación", peso: 12, norma: "CST art. 23.b" },
+  { key: "poderDisciplinario", pregunta: "Se le aplican el Reglamento Interno, llamados de atención o sanciones", bucket: "cuestionario", elemento: "Subordinación", peso: 12, norma: "CST arts. 104–115" },
   { key: "laborDelGiro", pregunta: "Cumple una labor permanente, propia del giro del negocio", bucket: "cuestionario", elemento: "Ajenidad", peso: 10, norma: "CST art. 23" },
-  { key: "herramientasEmpleador", pregunta: "La empresa le da las herramientas o insumos", bucket: "cuestionario", elemento: "Ajenidad", peso: 8, norma: "CST art. 23" },
+  { key: "herramientasEmpleador", pregunta: "La empresa le da las herramientas, equipos o insumos de trabajo", bucket: "cuestionario", elemento: "Ajenidad", peso: 8, norma: "CST art. 23" },
   { key: "pidePermisos", pregunta: "Pide permiso para ausentarse o tomar vacaciones", bucket: "cuestionario", elemento: "Subordinación", peso: 8, norma: "CST art. 23.b" },
   // ── Subordinación algorítmica — plataformas (Ley 2466/2025) ──
   { key: "asignacionAlgoritmica", pregunta: "Un algoritmo le asigna las tareas / rutas", bucket: "algoritmica", elemento: "Subordinación algorítmica", peso: 14, norma: "Ley 2466/2025" },
   { key: "penalizacionRechazos", pregunta: "Lo penalizan si rechaza tareas", bucket: "algoritmica", elemento: "Subordinación algorítmica", peso: 12, norma: "Ley 2466/2025" },
+  { key: "tarifaUnilateral", pregunta: "La plataforma fija la tarifa de forma unilateral", bucket: "algoritmica", elemento: "Subordinación algorítmica", peso: 8, norma: "Ley 2466/2025" },
   { key: "calificacionPlataforma", pregunta: "Lo evalúan por calificación de la plataforma", bucket: "algoritmica", elemento: "Subordinación algorítmica", peso: 8, norma: "Ley 2466/2025" },
   { key: "geolocalizacion", pregunta: "Lo controlan por geolocalización en tiempo real", bucket: "algoritmica", elemento: "Subordinación algorítmica", peso: 8, norma: "Ley 2466/2025" },
 ];
@@ -159,10 +165,10 @@ function detectarContradicciones(c: Contrato, s: SubordinacionSenales): Contradi
   if (c.tipo !== "prestacion_servicios" && c.tipo !== "plataforma") return [];
   const out: ContradiccionContrato[] = [];
 
-  if (s.registraJornada || s.leDefinenHorario || s.reportaAJefe || s.empresaAsignaTareas) {
+  if (s.registraJornada || s.leDefinenHorario || s.reportaAJefe || s.empresaAsignaTareas || s.controlMetodo || s.poderDisciplinario) {
     out.push({
       contratoDice: "Autonomía e independencia, sin horario ni subordinación (cláusula típica del contrato de prestación de servicios)",
-      realidadMuestra: "Cumple horario, marca asistencia o recibe instrucciones de un superior",
+      realidadMuestra: "Cumple horario, marca asistencia, recibe instrucciones sobre el método o se le aplica el régimen disciplinario",
       severidad: "alta",
     });
   }
@@ -173,10 +179,12 @@ function detectarContradicciones(c: Contrato, s: SubordinacionSenales): Contradi
       severidad: "alta",
     });
   }
-  if (s.pagoFijoPeriodico) {
+  if (s.pagoFijoPeriodico || s.pagosPrestacionales) {
     out.push({
       contratoDice: "Honorarios por entregable o contra factura",
-      realidadMuestra: "Recibe un pago fijo y periódico, igual que la nómina",
+      realidadMuestra: s.pagosPrestacionales
+        ? "Recibe pago fijo y periódico y prestaciones (primas, auxilios o vacaciones), igual que la nómina"
+        : "Recibe un pago fijo y periódico, igual que la nómina",
       severidad: "media",
     });
   }
@@ -236,7 +244,7 @@ const CLAUSULAS_BASE: { eje: ClausulaContrato["eje"]; texto: string; destacar: s
 function evaluarClausulas(c: Contrato, s: SubordinacionSenales): ClausulaContrato[] {
   if (c.tipo !== "prestacion_servicios" && c.tipo !== "plataforma") return [];
   const haySubordinacion =
-    s.registraJornada || s.leDefinenHorario || s.reportaAJefe || s.empresaAsignaTareas || s.pidePermisos || s.enOrganigrama;
+    s.registraJornada || s.leDefinenHorario || s.reportaAJefe || s.empresaAsignaTareas || s.controlMetodo || s.poderDisciplinario || s.pidePermisos || s.enOrganigrama;
   return CLAUSULAS_BASE.map((cl) => {
     let contradicha = false;
     let realidad: string | undefined;
@@ -250,8 +258,11 @@ function evaluarClausulas(c: Contrato, s: SubordinacionSenales): ClausulaContrat
         if (contradicha) realidad = "Cumple un horario definido por la empresa y/o registra entrada y salida.";
         break;
       case "remuneracion":
-        contradicha = Boolean(s.pagoFijoPeriodico);
-        if (contradicha) realidad = "Recibe un pago fijo y periódico, igual que la nómina (no honorarios por entregable).";
+        contradicha = Boolean(s.pagoFijoPeriodico || s.pagosPrestacionales);
+        if (contradicha)
+          realidad = s.pagosPrestacionales
+            ? "Recibe pago fijo y prestaciones (primas, auxilios o vacaciones), igual que la nómina."
+            : "Recibe un pago fijo y periódico, igual que la nómina (no honorarios por entregable).";
         break;
       case "exclusividad":
         contradicha = Boolean(s.exclusividad);
@@ -268,14 +279,16 @@ function evaluarClausulas(c: Contrato, s: SubordinacionSenales): ClausulaContrat
 
 function construirConcepto(s: SubordinacionSenales, algoritmica: boolean): ConceptoElemento[] {
   const subord =
-    s.registraJornada || s.leDefinenHorario || s.reportaAJefe || s.empresaAsignaTareas || s.pidePermisos || s.enOrganigrama || algoritmica;
-  const remun = Boolean(s.pagoFijoPeriodico);
+    s.registraJornada || s.leDefinenHorario || s.reportaAJefe || s.empresaAsignaTareas || s.controlMetodo || s.poderDisciplinario || s.pidePermisos || s.enOrganigrama || algoritmica;
+  const remun = Boolean(s.pagoFijoPeriodico || s.pagosPrestacionales);
   const ajenidad = Boolean(s.laborDelGiro || s.herramientasEmpleador || s.correoEquipoCorporativo || s.exclusividad);
   return [
     {
       elemento: "Prestación personal del servicio (CST art. 23.a)",
       presente: true,
-      hallazgo: "El servicio lo presta directamente una persona natural.",
+      hallazgo: s.prestacionPersonal
+        ? "El servicio lo presta personalmente una persona natural, sin posibilidad de reemplazo (intuitu personae)."
+        : "El servicio lo presta directamente una persona natural.",
     },
     {
       elemento: "Subordinación y dependencia continuada (CST art. 23.b)",

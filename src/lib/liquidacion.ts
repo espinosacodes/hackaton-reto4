@@ -50,7 +50,8 @@ export function liquidar(
   causa: CausaTerminacion,
   p: Params = PARAMS_2026,
   modo: ModoLiquidacion = "periodo",
-  factorVariable = 0
+  factorVariable = 0,
+  desdeDeuda?: string
 ): LiquidacionResultado {
   const lineas: LiquidacionLinea[] = [];
   const notas: string[] = [];
@@ -67,13 +68,20 @@ export function liquidar(
 
   // Periodo a liquidar por concepto (cada prestación tiene su propia causación).
   const acumulado = modo === "acumulado";
+  // En modo acumulado se puede elegir DESDE qué fecha se adeuda (por defecto, el
+  // inicio del contrato); se acota a [fechaInicio, hasta]. La indemnización sigue
+  // calculándose sobre la antigüedad TOTAL (no depende de esta ventana).
+  const baseDesde = acumulado && desdeDeuda ? maxFecha(c.fechaInicio, desdeDeuda) : c.fechaInicio;
+  const periodoElegido = acumulado && baseDesde !== c.fechaInicio;
   const anio = hasta.slice(0, 4);
   const inicioAnio = `${anio}-01-01`;
   const inicioSemestre = Number(hasta.slice(5, 7)) <= 6 ? `${anio}-01-01` : `${anio}-07-01`;
 
-  const desdeCesantias = acumulado ? c.fechaInicio : maxFecha(c.fechaInicio, inicioAnio);
-  const desdePrima = acumulado ? c.fechaInicio : maxFecha(c.fechaInicio, inicioSemestre);
-  const desdeVac = c.ultimasVacacionesTomadas
+  const desdeCesantias = acumulado ? baseDesde : maxFecha(c.fechaInicio, inicioAnio);
+  const desdePrima = acumulado ? baseDesde : maxFecha(c.fechaInicio, inicioSemestre);
+  const desdeVac = acumulado
+    ? baseDesde
+    : c.ultimasVacacionesTomadas
     ? maxFecha(c.fechaInicio, c.ultimasVacacionesTomadas)
     : c.fechaInicio;
 
@@ -83,7 +91,7 @@ export function liquidar(
 
   notas.push(
     acumulado
-      ? "Modo PASIVO ACUMULADO: liquida toda la antigüedad asumiendo que no se consignó ni pagó nada (mora total). Úselo solo para estimar contingencia, no como liquidación definitiva."
+      ? `Modo PASIVO ACUMULADO: liquida lo adeudado desde ${baseDesde} (${periodoElegido ? "periodo elegido" : "inicio del contrato"}) asumiendo mora total, no como liquidación definitiva. La indemnización por despido se calcula sobre la antigüedad total del contrato.`
       : "Modo LIQUIDACIÓN DEL PERIODO: cesantías e intereses del año en curso, prima del semestre en curso, vacaciones desde el último disfrute. Se asume que los periodos anteriores fueron consignados/pagados; el área contable debe validarlo contra los pagos reales."
   );
 

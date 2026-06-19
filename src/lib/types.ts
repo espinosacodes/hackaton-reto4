@@ -48,21 +48,27 @@ export interface Contrato {
 export interface SubordinacionSenales {
   // ── Datos objetivos: huellas duras que la empresa ya tiene ("estilo UGPP") ──
   pagoFijoPeriodico?: boolean; // mismo monto, mismo día cada mes (parece nómina)
-  correoEquipoCorporativo?: boolean; // correo / usuario / equipos de la empresa
+  pagosPrestacionales?: boolean; // recibe primas, bonos, auxilios o vacaciones pagadas
+  correoEquipoCorporativo?: boolean; // correo / usuario / carné corporativo
   registraJornada?: boolean; // marca entrada y salida (control de asistencia)
   enOrganigrama?: boolean; // figura en el organigrama o en evaluaciones de desempeño
   exclusividad?: boolean; // trabaja solo para la empresa
   continuidad?: boolean; // relación prolongada (años seguidos)
+  facturaViaTercero?: boolean; // factura a través de una SAS/tercero creado para el contrato
   // ── Cuestionario operativo neutral: hechos que responde RRHH ──
+  prestacionPersonal?: boolean; // debe prestarlo personalmente, sin reemplazo ni subcontratación
   leDefinenHorario?: boolean; // la empresa le fija el horario
   reportaAJefe?: boolean; // reporta a un superior que le da instrucciones
-  empresaAsignaTareas?: boolean; // le indican qué, cómo y cuándo hacer
-  herramientasEmpleador?: boolean; // la empresa le da herramientas / insumos
+  empresaAsignaTareas?: boolean; // le asignan las tareas a realizar (qué)
+  controlMetodo?: boolean; // le indican el método/procedimiento de ejecución (cómo)
+  poderDisciplinario?: boolean; // se le aplican RIT, llamados de atención o sanciones
+  herramientasEmpleador?: boolean; // la empresa le da herramientas / insumos de trabajo
   laborDelGiro?: boolean; // labor permanente y parte del giro del negocio
   pidePermisos?: boolean; // pide permiso para ausentarse o tomar vacaciones
   // ── Subordinación algorítmica — plataformas (Ley 2466/2025) ──
   asignacionAlgoritmica?: boolean;
   penalizacionRechazos?: boolean;
+  tarifaUnilateral?: boolean; // la plataforma fija la tarifa de forma unilateral
   calificacionPlataforma?: boolean;
   geolocalizacion?: boolean;
 }

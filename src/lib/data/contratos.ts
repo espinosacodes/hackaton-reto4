@@ -72,9 +72,12 @@ export const CONTRATOS: Contrato[] = [
       exclusividad: true,
       continuidad: true,
       // Cuestionario operativo
+      prestacionPersonal: true,
       leDefinenHorario: true,
       reportaAJefe: true,
       empresaAsignaTareas: true,
+      controlMetodo: true,
+      poderDisciplinario: true,
       herramientasEmpleador: true,
       laborDelGiro: true,
       pidePermisos: true,
@@ -103,6 +106,7 @@ export const CONTRATOS: Contrato[] = [
       geolocalizacion: true,
       calificacionPlataforma: true,
       penalizacionRechazos: true,
+      tarifaUnilateral: true,
     },
   },
   {
