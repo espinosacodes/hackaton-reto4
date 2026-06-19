@@ -43,19 +43,28 @@ export interface Contrato {
   fuente?: "ia" | "manual";
 }
 
+// Señales de cómo se OPERA la relación (no juicios jurídicos: hechos verificables).
+// Tres fuentes, de mayor a menor fuerza probatoria:
 export interface SubordinacionSenales {
-  horarioFijo?: boolean;
-  exclusividad?: boolean;
-  herramientasEmpleador?: boolean;
-  instruccionesDetalladas?: boolean;
-  remuneracionFija?: boolean;
-  continuidad?: boolean; // > 6 meses continuos
-  supervisionDirecta?: boolean;
-  // Ley 2466/2025 — subordinación algorítmica
+  // ── Datos objetivos: huellas duras que la empresa ya tiene ("estilo UGPP") ──
+  pagoFijoPeriodico?: boolean; // mismo monto, mismo día cada mes (parece nómina)
+  correoEquipoCorporativo?: boolean; // correo / usuario / equipos de la empresa
+  registraJornada?: boolean; // marca entrada y salida (control de asistencia)
+  enOrganigrama?: boolean; // figura en el organigrama o en evaluaciones de desempeño
+  exclusividad?: boolean; // trabaja solo para la empresa
+  continuidad?: boolean; // relación prolongada (años seguidos)
+  // ── Cuestionario operativo neutral: hechos que responde RRHH ──
+  leDefinenHorario?: boolean; // la empresa le fija el horario
+  reportaAJefe?: boolean; // reporta a un superior que le da instrucciones
+  empresaAsignaTareas?: boolean; // le indican qué, cómo y cuándo hacer
+  herramientasEmpleador?: boolean; // la empresa le da herramientas / insumos
+  laborDelGiro?: boolean; // labor permanente y parte del giro del negocio
+  pidePermisos?: boolean; // pide permiso para ausentarse o tomar vacaciones
+  // ── Subordinación algorítmica — plataformas (Ley 2466/2025) ──
   asignacionAlgoritmica?: boolean;
-  geolocalizacion?: boolean;
-  calificacionPlataforma?: boolean;
   penalizacionRechazos?: boolean;
+  calificacionPlataforma?: boolean;
+  geolocalizacion?: boolean;
 }
 
 // ── Liquidación ────────────────────────────────────────────────────────────
@@ -116,13 +125,45 @@ export interface Alerta {
 
 // ── Reclasificación ─────────────────────────────────────────────────────────
 
+export type BucketSenal = "dato_objetivo" | "cuestionario" | "algoritmica";
+
+export interface ContradiccionContrato {
+  contratoDice: string; // lo que pretende el contrato civil
+  realidadMuestra: string; // lo que muestra la operación
+  severidad: "alta" | "media";
+}
+
+export interface RubroExposicion {
+  concepto: string;
+  valor: number;
+  detalle: string;
+  norma: string;
+}
+
+export interface ExposicionReclasificacion {
+  rubros: RubroExposicion[];
+  montoMaximo: number; // exposición total si un juez reclasifica
+  exposicionEsperada: number; // probabilidad × monto máximo
+  mesesExpuestos: number; // meses dentro de la prescripción (≤ 36)
+}
+
+export interface ConceptoElemento {
+  elemento: string; // elemento del art. 23 CST
+  presente: boolean;
+  hallazgo: string;
+}
+
 export interface ReclasificacionResultado {
   contratoId: string;
   empleado: string;
-  puntaje: number; // 0–100
+  puntaje: number; // 0–100: índice de subordinación inferida
   nivel: "alto" | "medio" | "bajo";
+  probabilidad: number; // 0–100: % estimado de que un juez reclasifique
   algoritmica: boolean; // dispara régimen Ley 2466/2025
-  indicios: { senal: string; presente: boolean; peso: number; norma: string }[];
+  indicios: { senal: string; presente: boolean; peso: number; norma: string; bucket: BucketSenal }[];
+  contradicciones: ContradiccionContrato[];
+  exposicion: ExposicionReclasificacion;
+  conceptoPorElemento: ConceptoElemento[];
   conclusion: string;
 }
 

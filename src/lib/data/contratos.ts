@@ -64,13 +64,20 @@ export const CONTRATOS: Contrato[] = [
     extraccionConfianza: 0.91,
     fuente: "ia",
     subordinacion: {
-      horarioFijo: true,
+      // Datos objetivos
+      pagoFijoPeriodico: true,
+      correoEquipoCorporativo: true,
+      registraJornada: true,
+      enOrganigrama: true,
       exclusividad: true,
-      herramientasEmpleador: true,
-      instruccionesDetalladas: true,
-      remuneracionFija: true,
       continuidad: true,
-      supervisionDirecta: true,
+      // Cuestionario operativo
+      leDefinenHorario: true,
+      reportaAJefe: true,
+      empresaAsignaTareas: true,
+      herramientasEmpleador: true,
+      laborDelGiro: true,
+      pidePermisos: true,
     },
   },
   {
@@ -90,13 +97,12 @@ export const CONTRATOS: Contrato[] = [
     extraccionConfianza: 0.84,
     fuente: "ia",
     subordinacion: {
-      remuneracionFija: false,
       continuidad: true,
+      correoEquipoCorporativo: true,
       asignacionAlgoritmica: true,
       geolocalizacion: true,
       calificacionPlataforma: true,
       penalizacionRechazos: true,
-      herramientasEmpleador: false,
     },
   },
   {

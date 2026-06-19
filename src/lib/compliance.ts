@@ -12,8 +12,10 @@ export function resumenCompliance(contratos: Contrato[], hoy: string) {
 
   const recla = contratos
     .filter((c) => c.tipo === "prestacion_servicios" || c.tipo === "plataforma")
-    .map(evaluarReclasificacion);
+    .map((c) => evaluarReclasificacion(c, hoy));
   const reclaAlto = recla.filter((r) => r.nivel === "alto").length;
+  // Exposición esperada de la cartera por contrato realidad (valor esperado en pesos).
+  const reclaExposicion = recla.reduce((s, r) => s + r.exposicion.exposicionEsperada, 0);
 
   // Penalización ponderada → índice de compliance.
   const penalizacion = criticas * 12 + altas * 6 + medias * 2 + reclaAlto * 5;
@@ -35,6 +37,7 @@ export function resumenCompliance(contratos: Contrato[], hoy: string) {
     medias,
     recla,
     reclaAlto,
+    reclaExposicion,
     total: contratos.length,
   };
 }
