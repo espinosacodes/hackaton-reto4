@@ -1,19 +1,15 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { PageHeader } from "@/components/AppShell";
 import { Card, CardHeader, Badge, Button, Progress } from "@/components/ui";
 import { Reveal } from "@/components/motion";
+import { DocumentSource } from "@/components/DocumentSource";
 import { CONTRATOS } from "@/lib/data/contratos";
 import { addContratoConfirmado, logAudit, useBusqueda, setBusqueda } from "@/lib/store";
 import { Contrato } from "@/lib/types";
 import { cop, fmtDate } from "@/lib/utils";
-import {
-  ACCEPTED_FILE_TYPES,
-  extractTextFromFile,
-  FileExtractError,
-} from "@/lib/extract-file";
-import { DocumentUpload, Flash, TickCircle, People, Cpu, Document, Warning2 } from "iconsax-react";
+import { DocumentUpload, Flash, TickCircle, People, Cpu, Warning2 } from "iconsax-react";
 
 const tipoLabel: Record<string, string> = {
   indefinido: "Indefinido",
@@ -41,11 +37,7 @@ export default function ContratosPage() {
   const [texto, setTexto] = useState("");
   const [cargando, setCargando] = useState(false);
   const [extraccion, setExtraccion] = useState<Record<string, unknown> | null>(null);
-  const [archivo, setArchivo] = useState<string | null>(null);
   const [leyendo, setLeyendo] = useState(false);
-  const [errArchivo, setErrArchivo] = useState<string | null>(null);
-  const [arrastrando, setArrastrando] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   // Revisión humana: copia editable de lo extraído + estado de validación.
   // Al llegar una nueva extracción reseteamos en render (patrón recomendado por React).
@@ -103,43 +95,8 @@ export default function ContratosPage() {
     setEditando(false);
   }
 
-  async function cargarArchivo(file: File) {
-    setErrArchivo(null);
-    setLeyendo(true);
-    try {
-      const t = await extractTextFromFile(file);
-      setTexto(t);
-      setArchivo(file.name);
-      setExtraccion(null);
-    } catch (err) {
-      setArchivo(null);
-      setErrArchivo(
-        err instanceof FileExtractError
-          ? err.message
-          : "No se pudo procesar el archivo.",
-      );
-    } finally {
-      setLeyendo(false);
-    }
-  }
-
-  function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (file) cargarArchivo(file);
-    e.target.value = ""; // permite recargar el mismo archivo
-  }
-
-  function onDrop(e: React.DragEvent) {
-    e.preventDefault();
-    setArrastrando(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file) cargarArchivo(file);
-  }
-
   function cargarEjemplo() {
-    setErrArchivo(null);
     setTexto(EJEMPLO);
-    setArchivo("contrato-ejemplo.txt");
     setExtraccion(null);
   }
 
@@ -183,55 +140,19 @@ export default function ContratosPage() {
             right={<DocumentUpload size={20} color="var(--red)" />}
           />
           <div className="px-5 py-4">
-            {/* Carga de archivo: PDF / DOCX / TXT (lectura en el navegador, sin subir al servidor) */}
-            <input
-              ref={inputRef}
-              type="file"
-              accept={ACCEPTED_FILE_TYPES}
-              onChange={onPickFile}
-              className="hidden"
+            {/* Origen del documento: archivo local o bucket propio de la empresa */}
+            <DocumentSource
+              onText={(t) => {
+                setTexto(t);
+                setExtraccion(null);
+              }}
+              onBusyChange={setLeyendo}
             />
-            <div
-              onClick={() => inputRef.current?.click()}
-              onDragOver={(e) => { e.preventDefault(); setArrastrando(true); }}
-              onDragLeave={() => setArrastrando(false)}
-              onDrop={onDrop}
-              className={`flex min-h-[180px] cursor-pointer flex-col items-center justify-center gap-3 border border-dashed px-6 py-10 text-center transition-colors ${
-                arrastrando ? "border-ink bg-surface-2" : "border-border-2 hover:border-ink"
-              }`}
-              style={{ borderRadius: "var(--radius)" }}
-            >
-              {leyendo ? (
-                <>
-                  <Flash size={28} color="var(--red)" variant="Bold" className="animate-pulse" />
-                  <span className="text-[13px] text-ink-2">Leyendo archivo…</span>
-                </>
-              ) : archivo ? (
-                <>
-                  <Document size={30} color="var(--success)" variant="Bold" />
-                  <div>
-                    <div className="text-[13px] font-medium text-ink">{archivo}</div>
-                    <div className="mt-0.5 text-[11.5px] text-ink-3">
-                      {texto.length.toLocaleString("es-CO")} caracteres extraídos · listo para analizar
-                    </div>
-                  </div>
-                  <span className="text-[11px] text-ink-3 underline">Cambiar archivo</span>
-                </>
-              ) : (
-                <>
-                  <DocumentUpload size={30} color="var(--red)" />
-                  <div>
-                    <div className="text-[13px] font-medium text-ink">
-                      Arrastre el contrato aquí o haga clic para buscarlo
-                    </div>
-                    <div className="mt-0.5 text-[11.5px] text-ink-3">
-                      Formatos admitidos: PDF, DOCX o TXT · máx. 12 MB
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-            {errArchivo && <p className="mt-3 text-[12px] text-red-dark">{errArchivo}</p>}
+            {texto.trim() && (
+              <p className="mt-2 text-[11.5px] text-ink-3">
+                {texto.length.toLocaleString("es-CO")} caracteres extraídos · listo para analizar
+              </p>
+            )}
             <div className="mt-3 flex items-center justify-between">
               <button
                 type="button"

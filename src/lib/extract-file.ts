@@ -78,3 +78,33 @@ export async function extractTextFromFile(file: File): Promise<string> {
   }
   return texto;
 }
+
+// Descarga un documento desde la URL del bucket de la empresa (S3/GCS/Azure o
+// cualquier URL HTTPS) y extrae su texto reutilizando el mismo flujo que la
+// carga local. El bucket debe permitir CORS para que el navegador lo lea.
+export async function extractTextFromUrl(url: string): Promise<string> {
+  let res: Response;
+  try {
+    res = await fetch(url);
+  } catch {
+    throw new FileExtractError(
+      "No se pudo conectar con el bucket. Verifique la URL y que el almacenamiento permita acceso CORS desde el navegador.",
+    );
+  }
+  if (!res.ok) {
+    throw new FileExtractError(
+      `El bucket respondió ${res.status}. Verifique la ruta del documento y los permisos de lectura.`,
+    );
+  }
+
+  const blob = await res.blob();
+  if (blob.size > MAX_FILE_BYTES) {
+    throw new FileExtractError("El documento supera el límite de 12 MB.");
+  }
+
+  // Nombre/extensión a partir de la ruta para reutilizar el extractor por tipo.
+  const path = url.split(/[?#]/)[0];
+  const name = decodeURIComponent(path.slice(path.lastIndexOf("/") + 1)) || "documento.txt";
+  const file = new File([blob], name, { type: blob.type });
+  return extractTextFromFile(file);
+}
