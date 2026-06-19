@@ -11,6 +11,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   useUsuario,
   clearUsuario,
@@ -413,7 +414,9 @@ function InvitarModal({ onClose }: { onClose: () => void }) {
     }
   }
 
-  return (
+  // Se monta en un portal a <body>: el <header> usa backdrop-blur, que crea un
+  // containing block y rompería el `fixed inset-0` anclándolo a la barra superior.
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" onClick={onClose}>
       <div
         className="max-h-[90vh] w-full max-w-sm overflow-y-auto border border-border bg-surface p-6"
@@ -477,7 +480,8 @@ function InvitarModal({ onClose }: { onClose: () => void }) {
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
