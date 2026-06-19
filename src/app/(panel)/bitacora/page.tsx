@@ -85,6 +85,9 @@ export default function BitacoraPage() {
                       <Badge tone={tono[ev.accion] ?? "neutral"}>{ev.usuario}</Badge>
                     </div>
                     <p className="mt-0.5 text-[12px] text-ink-2">{ev.detalle}</p>
+                    {ev.email && (
+                      <p className="mt-0.5 text-[11px] text-ink-3">{ev.email}</p>
+                    )}
                   </div>
                   <span className="font-num shrink-0 text-[11px] text-ink-3">{fmtTs(ev.ts)}</span>
                 </div>

@@ -1,11 +1,10 @@
-import { CONTRATOS, HOY } from "./data/contratos";
+import { Contrato } from "./types";
 import { generarAlertas } from "./alertas";
 import { evaluarReclasificacion } from "./reclasificacion";
 
-/** Agrega el estado de compliance de la nómina en un único índice 0–100. */
-export function resumenCompliance() {
-  const contratos = CONTRATOS;
-  const alertas = generarAlertas(contratos, HOY);
+/** Agrega el estado de compliance de una nómina en un único índice 0–100. */
+export function resumenCompliance(contratos: Contrato[], hoy: string) {
+  const alertas = generarAlertas(contratos, hoy);
 
   const criticas = alertas.filter((a) => a.severidad === "critica").length;
   const altas = alertas.filter((a) => a.severidad === "alta").length;

@@ -4,10 +4,9 @@ import { useMemo, useRef, useState } from "react";
 import { PageHeader } from "@/components/AppShell";
 import { Card, CardHeader, Badge, Button } from "@/components/ui";
 import { Reveal } from "@/components/motion";
-import { CONTRATOS, HOY } from "@/lib/data/contratos";
 import { liquidar, compararLiquidacion, type ModoLiquidacion } from "@/lib/liquidacion";
 import { calcularRecargo, CONCEPTOS_RECARGO, type TipoHora } from "@/lib/recargos";
-import { useContratosConfirmados, useParametros, logAudit } from "@/lib/store";
+import { useContratosConfirmados, useParametros, useEmpresaActiva, logAudit } from "@/lib/store";
 import { CausaTerminacion } from "@/lib/types";
 import { cop, fmtDate } from "@/lib/utils";
 import { Calculator, TickCircle, CloseCircle, Warning2, InfoCircle, Clock } from "iconsax-react";
@@ -18,7 +17,11 @@ const CAUSAS: { value: CausaTerminacion; label: string }[] = [
 ];
 
 export default function LiquidacionesPage() {
-  const [id, setId] = useState(CONTRATOS[0].id);
+  const empresa = useEmpresaActiva();
+  const CONTRATOS = useMemo(() => empresa?.contratos ?? [], [empresa]);
+  const HOY = empresa?.hoy ?? "2026-06-18";
+
+  const [id, setId] = useState(CONTRATOS[0]?.id ?? "");
   const [causa, setCausa] = useState<CausaTerminacion>("sin_justa_causa");
   const [modo, setModo] = useState<ModoLiquidacion>("periodo");
   const [hasta, setHasta] = useState(HOY);
@@ -28,7 +31,7 @@ export default function LiquidacionesPage() {
 
   const confirmados = useContratosConfirmados();
   const params = useParametros();
-  const todos = useMemo(() => [...confirmados, ...CONTRATOS], [confirmados]);
+  const todos = useMemo(() => [...confirmados, ...CONTRATOS], [confirmados, CONTRATOS]);
   const contrato = todos.find((c) => c.id === id) ?? todos[0];
 
   // Horas extra / recargos del periodo → factor salarial variable de la liquidación.

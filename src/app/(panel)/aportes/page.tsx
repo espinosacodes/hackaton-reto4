@@ -5,8 +5,8 @@ import Link from "next/link";
 import { PageHeader } from "@/components/AppShell";
 import { Card, CardHeader, Badge, Button } from "@/components/ui";
 import { Reveal } from "@/components/motion";
-import { CONTRATOS, HOY } from "@/lib/data/contratos";
-import { useContratosConfirmados, useParametros, useNitEmpresa, logAudit } from "@/lib/store";
+import { HOY } from "@/lib/data/contratos";
+import { useContratosConfirmados, useParametros, useNitEmpresa, useEmpresaActiva, logAudit } from "@/lib/store";
 import { calcularAportes, compararAporte, type ClaseRiesgo, type EstadoAporte } from "@/lib/aportes";
 import { ACCEPTED_FILE_TYPES, extractTextFromFile, FileExtractError } from "@/lib/extract-file";
 import { cop, fmtDate, daysBetween } from "@/lib/utils";
@@ -95,6 +95,8 @@ function proximaPILA(nit2: number, hoy: string): { fecha: string; dias: number; 
 }
 
 export default function AportesPage() {
+  const empresa = useEmpresaActiva();
+  const CONTRATOS = useMemo(() => empresa?.contratos ?? [], [empresa]);
   const confirmados = useContratosConfirmados();
   const params = useParametros();
   const [clasePorId, setClasePorId] = useState<Record<string, ClaseRiesgo>>({});
@@ -103,7 +105,7 @@ export default function AportesPage() {
 
   const trabajadores = useMemo(
     () => [...confirmados, ...CONTRATOS].filter((c) => c.estado === "activo" && LABORALES.includes(c.tipo)),
-    [confirmados]
+    [confirmados, CONTRATOS]
   );
   const aportes = useMemo(
     () => trabajadores.map((c) => calcularAportes(c, params, clasePorId[c.id] ?? "I")),

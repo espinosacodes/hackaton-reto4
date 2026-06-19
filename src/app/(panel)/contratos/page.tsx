@@ -5,8 +5,7 @@ import { PageHeader } from "@/components/AppShell";
 import { Card, CardHeader, Badge, Button, Progress } from "@/components/ui";
 import { Reveal } from "@/components/motion";
 import { DocumentSource } from "@/components/DocumentSource";
-import { CONTRATOS } from "@/lib/data/contratos";
-import { addContratoConfirmado, logAudit, useBusqueda, setBusqueda } from "@/lib/store";
+import { addContratoConfirmado, logAudit, useBusqueda, setBusqueda, useEmpresaActiva } from "@/lib/store";
 import { Contrato } from "@/lib/types";
 import { cop, fmtDate } from "@/lib/utils";
 import { DocumentUpload, Flash, TickCircle, People, Cpu, Warning2, ArrowDown2 } from "iconsax-react";
@@ -34,6 +33,8 @@ Duración: del 1 de julio de 2025 al 30 de junio de 2026.
 El empleador se obliga a pagar seguridad social, prima de servicios, cesantías y vacaciones.`;
 
 export default function ContratosPage() {
+  const empresa = useEmpresaActiva();
+  const CONTRATOS = empresa?.contratos ?? [];
   const [texto, setTexto] = useState("");
   const [cargando, setCargando] = useState(false);
   const [extraccion, setExtraccion] = useState<Record<string, unknown> | null>(null);

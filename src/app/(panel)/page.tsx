@@ -7,15 +7,16 @@ import { Reveal, CountUp } from "@/components/motion";
 import { resumenCompliance } from "@/lib/compliance";
 import { cop, copShort, fmtDate } from "@/lib/utils";
 import { liquidar } from "@/lib/liquidacion";
-import { useParametros } from "@/lib/store";
-import { HOY } from "@/lib/data/contratos";
+import { useParametros, useEmpresaActiva } from "@/lib/store";
 import { NAV } from "@/components/nav";
 import { Warning2, Convertshape2, ArrowRight2, Danger, People } from "iconsax-react";
 
 const LABORALES = ["indefinido", "fijo", "obra_labor", "aprendizaje"];
 
 export default function Dashboard() {
-  const r = resumenCompliance();
+  const empresa = useEmpresaActiva();
+  const HOY = empresa?.hoy ?? "2026-06-18";
+  const r = resumenCompliance(empresa?.contratos ?? [], HOY);
   const params = useParametros();
 
   // Pasivo prestacional ACUMULADO: solo contratos laborales activos (excluye civiles:

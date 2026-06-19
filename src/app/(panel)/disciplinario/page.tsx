@@ -13,19 +13,20 @@ import {
   type EtapaDisciplinaria,
 } from "@/lib/debido-proceso";
 import { JUSTAS_CAUSAS_EMPLEADOR } from "@/lib/data/justas-causas";
-import { CONTRATOS } from "@/lib/data/contratos";
-import { useContratosConfirmados, useDocumentosPerfil, logAudit } from "@/lib/store";
+import { useContratosConfirmados, useDocumentosPerfil, useEmpresaActiva, logAudit } from "@/lib/store";
+import { EvidenciaPanel } from "@/components/EvidenciaPanel";
 import { Judge, DocumentText, Warning2, TickCircle, Flash, Cpu } from "iconsax-react";
 
-const EMPRESA = "Empresa Demo S.A.S.";
-
 export default function DisciplinarioPage() {
+  const empresa = useEmpresaActiva();
+  const CONTRATOS = useMemo(() => empresa?.contratos ?? [], [empresa]);
+  const EMPRESA = empresa?.nombre ?? "—";
   const confirmados = useContratosConfirmados();
   const docsPerfil = useDocumentosPerfil();
-  const todos = useMemo(() => [...confirmados, ...CONTRATOS], [confirmados]);
+  const todos = useMemo(() => [...confirmados, ...CONTRATOS], [confirmados, CONTRATOS]);
 
   const [trabajadorId, setTrabajadorId] = useState(
-    CONTRATOS.find((c) => c.cargo.toLowerCase().includes("operario"))?.id ?? CONTRATOS[0].id
+    CONTRATOS.find((c) => c.cargo.toLowerCase().includes("operario"))?.id ?? CONTRATOS[0]?.id ?? ""
   );
   const trab = todos.find((c) => c.id === trabajadorId) ?? todos[0];
 
@@ -226,6 +227,18 @@ export default function DisciplinarioPage() {
                     ))}
                   </ul>
                 </div>
+
+                {/* Análisis multimodal de pruebas — solo en la etapa de valoración */}
+                {etapa === "pruebas" && (
+                  <EvidenciaPanel
+                    caso={{
+                      empleado: trab.empleado,
+                      cargo: trab.cargo,
+                      hechos: form.hechos,
+                      causal: caso.causalTexto,
+                    }}
+                  />
+                )}
 
                 {/* Asesoría IA */}
                 <div className="hairline bg-surface-2 px-4 py-3">

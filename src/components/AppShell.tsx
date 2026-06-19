@@ -6,16 +6,25 @@ import { Logo } from "./Logo";
 import { NAV } from "./nav";
 import { cn } from "@/lib/utils";
 import { SearchNormal1, Notification, ShieldTick } from "iconsax-react";
-import { CONTRATOS, HOY } from "@/lib/data/contratos";
 import { generarAlertas } from "@/lib/alertas";
 import { fmtDate } from "@/lib/utils";
-import { useBusqueda, setBusqueda } from "@/lib/store";
+import { useBusqueda, setBusqueda, useEmpresaActiva } from "@/lib/store";
+import { AuthGate, UserMenu } from "./Auth";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
+  return (
+    <AuthGate>
+      <AppShellInner>{children}</AppShellInner>
+    </AuthGate>
+  );
+}
+
+function AppShellInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const busqueda = useBusqueda();
-  const alertas = generarAlertas(CONTRATOS, HOY);
+  const empresa = useEmpresaActiva();
+  const alertas = empresa ? generarAlertas(empresa.contratos, empresa.hoy) : [];
   const criticas = alertas.filter((a) => a.severidad === "critica").length;
 
   return (
@@ -86,8 +95,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </form>
           <div className="ml-auto flex items-center gap-4">
             <div className="hidden text-right sm:block">
-              <div className="text-[12px] font-medium text-ink">Empresa Demo S.A.S.</div>
-              <div className="text-[11px] text-ink-3">Nómina · {CONTRATOS.length} vínculos · {fmtDate(HOY)}</div>
+              <div className="text-[12px] font-medium text-ink">{empresa?.nombre ?? "—"}</div>
+              <div className="text-[11px] text-ink-3">
+                Nómina · {empresa?.contratos.length ?? 0} vínculos · {empresa ? fmtDate(empresa.hoy) : ""}
+              </div>
             </div>
             <Link href="/alertas" className="relative" aria-label="Ver alertas">
               <Notification size={20} color="var(--ink-2)" />
@@ -95,9 +106,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <span className="absolute -right-1 -top-1 h-2 w-2 bg-red pulse-red" style={{ borderRadius: "var(--radius)" }} />
               )}
             </Link>
-            <div className="flex h-8 w-8 items-center justify-center bg-black text-[12px] font-medium text-white" style={{ borderRadius: "var(--radius)" }}>
-              RH
-            </div>
+            <UserMenu />
           </div>
         </header>
         <main className="flex-1 overflow-y-auto px-6 py-7">{children}</main>
