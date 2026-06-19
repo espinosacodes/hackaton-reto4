@@ -512,12 +512,12 @@ function Row({ c, abierto, onToggle, onDelete }: { c: Contrato; abierto: boolean
   const confColor = confPct >= 85 ? "var(--success)" : confPct >= 60 ? "var(--warning)" : "var(--red)";
   return (
     <div>
-      <button
-        onClick={onToggle}
-        className="grid w-full grid-cols-12 items-center gap-3 px-5 py-3 text-left text-[13px] transition-colors hover:bg-surface-2"
-        style={{ background: abierto ? "var(--surface-2)" : undefined }}
-        aria-expanded={abierto}
-      >
+      <div className="flex items-stretch" style={{ background: abierto ? "var(--surface-2)" : undefined }}>
+        <button
+          onClick={onToggle}
+          className="grid flex-1 grid-cols-12 items-center gap-3 px-5 py-3 text-left text-[13px] transition-colors hover:bg-surface-2"
+          aria-expanded={abierto}
+        >
         <div className="col-span-4 flex items-center gap-2">
           <ArrowDown2
             size={13}
@@ -550,7 +550,19 @@ function Row({ c, abierto, onToggle, onDelete }: { c: Contrato; abierto: boolean
             {confPct}%
           </span>
         </div>
-      </button>
+        </button>
+        {onDelete && (
+          <button
+            type="button"
+            onClick={onDelete}
+            title="Eliminar de la nómina (cargado por error)"
+            aria-label="Eliminar de la nómina"
+            className="flex shrink-0 items-center px-3 text-ink-3 transition-colors hover:bg-surface-2 hover:text-red"
+          >
+            <Trash size={15} />
+          </button>
+        )}
+      </div>
 
       {abierto && (
         <div className="border-t border-border bg-surface px-5 py-3.5">
