@@ -1,6 +1,7 @@
 import { Alerta, Contrato } from "./types";
-import { daysBetween, addDays, toISO } from "./utils";
+import { daysBetween, addDays, toISO, cop } from "./utils";
 import { PARAMS_2026 } from "./liquidacion";
+import { calcularRecargo } from "./recargos";
 
 // Ventanas de alerta (días).
 const PREAVISO_FIJO = 30; // CST art. 46 — preaviso de no renovación
@@ -106,8 +107,11 @@ export function generarAlertas(contratos: Contrato[], hoy: string): Alerta[] {
       }
     }
 
-    // 4. Jornada — Ley 2101/2021 (42h en 2026)
+    // 4. Jornada — Ley 2101/2021 (42h en 2026). Incluye el monto en riesgo del suplementario.
     if (c.horasSemana > HORAS_2101) {
+      const excesoSem = c.horasSemana - HORAS_2101;
+      const horasMes = excesoSem * 4.345; // semanas/mes
+      const valorMes = calcularRecargo(c.salarioMensual, "extra_diurna", horasMes, hoy, c.horasSemana).total;
       alertas.push({
         id: `${c.id}-jornada`,
         contratoId: c.id,
@@ -115,9 +119,9 @@ export function generarAlertas(contratos: Contrato[], hoy: string): Alerta[] {
         tipo: "jornada_2101",
         severidad: "alta",
         titulo: `Jornada de ${c.horasSemana}h excede el máximo legal (42h)`,
-        detalle: `Desde 2026 la jornada máxima es de 42 horas semanales. El exceso debe remunerarse como trabajo suplementario.`,
+        detalle: `Exceso de ${excesoSem}h/semana (~${Math.round(horasMes)}h/mes). Debe remunerarse como trabajo suplementario: ~${cop(valorMes)}/mes en riesgo (estimado como extra diurna). Desde 2026 la jornada máxima es de 42 horas semanales.`,
         norma: "Ley 2101/2021",
-        accion: "Ajustar la jornada a 42h o liquidar y pagar horas extra; actualizar el contrato.",
+        accion: "Ajustar la jornada a 42h o pagar el suplementario; actualizar el contrato.",
       });
     }
 

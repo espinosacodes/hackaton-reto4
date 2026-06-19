@@ -13,11 +13,17 @@ import {
   useDocumentosPerfil,
   addDocumentoPerfil,
   removeDocumentoPerfil,
+  useTiposLineamiento,
+  addTipoLineamiento,
+  removeTipoLineamiento,
   useParametros,
   setParametros,
   resetParametros,
+  useNitEmpresa,
+  setNitEmpresa,
   logAudit,
   type DocumentoPerfil,
+  type TipoLineamiento,
 } from "@/lib/store";
 import { cop } from "@/lib/utils";
 import {
@@ -29,6 +35,7 @@ import {
   CloseCircle,
   Trash,
   Calculator,
+  AddSquare,
 } from "iconsax-react";
 
 interface Hallazgo {
@@ -38,17 +45,26 @@ interface Hallazgo {
   norma: string;
 }
 
-const TIPOS: { tipo: string; desc: string }[] = [
-  { tipo: "Reglamento Interno de Trabajo (RIT)", desc: "Base del régimen disciplinario y de las faltas (CST art. 115)." },
-  { tipo: "Manual de convivencia / conducta", desc: "Conductas esperadas y faltas de convivencia." },
-  { tipo: "PTEE (transparencia y ética)", desc: "Programa de Transparencia y Ética Empresarial." },
-  { tipo: "Convención / pacto colectivo", desc: "Acuerdos colectivos aplicables." },
-  { tipo: "Código de ética", desc: "Principios y deberes de conducta." },
-];
-
 export default function PerfilPage() {
   const docs = useDocumentosPerfil();
+  const tipos = useTiposLineamiento();
+  const nit = useNitEmpresa();
   const byTipo = (t: string) => docs.find((d) => d.tipo === t);
+  const [nuevo, setNuevo] = useState("");
+
+  function eliminarTipo(t: TipoLineamiento) {
+    const d = byTipo(t.tipo);
+    if (d) removeDocumentoPerfil(d.id);
+    removeTipoLineamiento(t.tipo);
+    logAudit("Lineamiento eliminado", t.tipo);
+  }
+  function agregarTipo() {
+    const nombre = nuevo.trim();
+    if (!nombre) return;
+    addTipoLineamiento(nombre);
+    logAudit("Lineamiento agregado", nombre);
+    setNuevo("");
+  }
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -67,16 +83,58 @@ export default function PerfilPage() {
         </p>
       </div>
 
+      {/* Datos de la empresa */}
+      <Card className="mb-3">
+        <CardHeader overline="Datos de la empresa" title="Identificación para el compliance" />
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-4">
+          <label className="flex items-center gap-2 text-[12.5px] text-ink-2">
+            <span className="font-medium text-ink">NIT — 2 últimos dígitos</span>
+            <input
+              value={nit}
+              onChange={(e) => setNitEmpresa(e.target.value.replace(/\D/g, "").slice(0, 2))}
+              inputMode="numeric"
+              placeholder="00"
+              className="w-14 border border-border-2 bg-surface px-2 py-1.5 text-center font-num text-[13px] text-ink focus:border-ink focus:outline-none"
+              style={{ borderRadius: "var(--radius)" }}
+            />
+          </label>
+          <span className="text-[11.5px] text-ink-3">
+            Define la fecha de pago de la PILA en el calendario de Aportes (Decreto 1990/2016).
+          </span>
+        </div>
+      </Card>
+
       <div className="space-y-3">
-        {TIPOS.map((t, i) => (
+        {tipos.map((t, i) => (
           <Reveal key={t.tipo} delay={i * 0.04}>
-            <DocSlot tipo={t.tipo} desc={t.desc} doc={byTipo(t.tipo)} />
+            <DocSlot tipo={t.tipo} desc={t.desc} doc={byTipo(t.tipo)} onEliminar={() => eliminarTipo(t)} />
           </Reveal>
         ))}
       </div>
 
-      <div className="mt-4 text-[12px] text-ink-3">
-        {docs.length} de {TIPOS.length} documentos cargados.
+      {/* Agregar lineamiento interno (SARLAFT, SST, política de datos, etc.) */}
+      <div
+        className="mt-3 flex flex-wrap items-center gap-2 border border-dashed border-border-2 px-4 py-3"
+        style={{ borderRadius: "var(--radius)" }}
+      >
+        <span className="text-[12px] text-ink-2">Agregar otro lineamiento:</span>
+        <input
+          value={nuevo}
+          onChange={(e) => setNuevo(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") agregarTipo();
+          }}
+          placeholder="Ej: SARLAFT, SST, política de tratamiento de datos…"
+          className="min-w-[180px] flex-1 border border-border-2 bg-surface px-2.5 py-1.5 text-[12.5px] text-ink focus:border-ink focus:outline-none"
+          style={{ borderRadius: "var(--radius)" }}
+        />
+        <Button variant="secondary" onClick={agregarTipo}>
+          <AddSquare size={14} /> Agregar
+        </Button>
+      </div>
+
+      <div className="mt-3 text-[12px] text-ink-3">
+        {docs.length} de {tipos.length} documentos cargados.
       </div>
 
       <ParametrosSection />
@@ -178,7 +236,7 @@ function ParametrosSection() {
   );
 }
 
-function DocSlot({ tipo, desc, doc }: { tipo: string; desc: string; doc?: DocumentoPerfil }) {
+function DocSlot({ tipo, desc, doc, onEliminar }: { tipo: string; desc: string; doc?: DocumentoPerfil; onEliminar: () => void }) {
   const [leyendo, setLeyendo] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [arrastrando, setArrastrando] = useState(false);
@@ -231,7 +289,22 @@ function DocSlot({ tipo, desc, doc }: { tipo: string; desc: string; doc?: Docume
       <CardHeader
         overline="Documento interno"
         title={tipo}
-        right={doc ? <Badge tone="success"><TickCircle size={12} className="mr-1" /> Cargado</Badge> : undefined}
+        right={
+          <div className="flex items-center gap-2">
+            {doc && (
+              <Badge tone="success">
+                <TickCircle size={12} className="mr-1" /> Cargado
+              </Badge>
+            )}
+            <button
+              onClick={onEliminar}
+              title="Eliminar este lineamiento"
+              className="flex shrink-0 items-center gap-1 text-[11.5px] text-ink-3 transition-colors hover:text-red"
+            >
+              <Trash size={15} color="currentColor" /> Eliminar
+            </button>
+          </div>
+        }
       />
       <div className="px-5 py-4">
         <p className="mb-3 text-[12px] text-ink-3">{desc}</p>

@@ -1,14 +1,16 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { PageHeader } from "@/components/AppShell";
 import { Card, CardHeader, Badge, Button } from "@/components/ui";
 import { Reveal } from "@/components/motion";
-import { useContratosConfirmados, useParametros, useEmpresaActiva, logAudit } from "@/lib/store";
+import { HOY } from "@/lib/data/contratos";
+import { useContratosConfirmados, useParametros, useNitEmpresa, useEmpresaActiva, logAudit } from "@/lib/store";
 import { calcularAportes, compararAporte, type ClaseRiesgo, type EstadoAporte } from "@/lib/aportes";
 import { ACCEPTED_FILE_TYPES, extractTextFromFile, FileExtractError } from "@/lib/extract-file";
-import { cop } from "@/lib/utils";
-import { ShieldTick, DocumentUpload, Document, Flash, Cpu, InfoCircle, Calculator, TickCircle, Warning2 } from "iconsax-react";
+import { cop, fmtDate, daysBetween } from "@/lib/utils";
+import { ShieldTick, DocumentUpload, Document, Flash, Cpu, InfoCircle, Calculator, TickCircle, Warning2, Calendar } from "iconsax-react";
 
 const LABORALES = ["indefinido", "fijo", "obra_labor", "aprendizaje"];
 
@@ -29,22 +31,93 @@ const estadoLabel: Record<EstadoAporte, string> = {
   sobreaporte: "Sobreaporte",
 };
 
+// Calendario de obligaciones del empleador (fechas límite recurrentes en Colombia).
+const OBLIGACIONES: { nombre: string; md: string; periodicidad: string; norma: string }[] = [
+  { nombre: "Intereses a las cesantías (al trabajador)", md: "01-31", periodicidad: "Anual", norma: "Ley 52/1975" },
+  { nombre: "Consignación de cesantías al fondo", md: "02-14", periodicidad: "Anual", norma: "Ley 50/1990" },
+  { nombre: "Dotación — 1ª entrega", md: "04-30", periodicidad: "3 veces/año", norma: "Ley 11/1984 (≤2 SMMLV)" },
+  { nombre: "Prima de servicios — 1er semestre", md: "06-30", periodicidad: "Semestral", norma: "CST art. 306" },
+  { nombre: "Dotación — 2ª entrega", md: "08-31", periodicidad: "3 veces/año", norma: "Ley 11/1984 (≤2 SMMLV)" },
+  { nombre: "Prima de servicios — 2do semestre", md: "12-20", periodicidad: "Semestral", norma: "CST art. 306" },
+  { nombre: "Dotación — 3ª entrega", md: "12-20", periodicidad: "3 veces/año", norma: "Ley 11/1984 (≤2 SMMLV)" },
+];
+
+// Próxima ocurrencia (este año si aún no pasa, si no el siguiente) + días restantes.
+function proximaObligacion(md: string, hoy: string) {
+  const anio = Number(hoy.slice(0, 4));
+  let fecha = `${anio}-${md}`;
+  if (fecha < hoy) fecha = `${anio + 1}-${md}`;
+  return { fecha, dias: daysBetween(hoy, fecha) };
+}
+
+// PILA (seguridad social): pago MENSUAL por los DOS ÚLTIMOS DÍGITOS DEL NIT del aportante
+// (Decreto 1990/2016). No es por empleado: es por EMPRESA. Cada rango paga en un día hábil
+// distinto del mes siguiente al periodo cotizado.
+const PILA_DH: { max: number; dh: number }[] = [
+  { max: 7, dh: 2 }, { max: 14, dh: 3 }, { max: 21, dh: 4 }, { max: 28, dh: 5 },
+  { max: 35, dh: 6 }, { max: 42, dh: 7 }, { max: 49, dh: 8 }, { max: 56, dh: 9 },
+  { max: 63, dh: 10 }, { max: 69, dh: 11 }, { max: 75, dh: 12 }, { max: 81, dh: 13 },
+  { max: 87, dh: 14 }, { max: 93, dh: 15 }, { max: 99, dh: 16 },
+];
+// Festivos de Colombia 2026 (para contar días hábiles).
+const FESTIVOS_2026 = new Set([
+  "2026-01-01", "2026-01-12", "2026-03-23", "2026-04-02", "2026-04-03", "2026-05-01",
+  "2026-05-18", "2026-06-08", "2026-06-15", "2026-06-29", "2026-07-20", "2026-08-07",
+  "2026-08-17", "2026-10-12", "2026-11-02", "2026-11-16", "2026-12-08", "2026-12-25",
+]);
+function esHabil(d: Date): boolean {
+  const dow = d.getUTCDay();
+  if (dow === 0 || dow === 6) return false; // domingo / sábado
+  return !FESTIVOS_2026.has(d.toISOString().slice(0, 10));
+}
+function nthDiaHabil(year: number, month0: number, n: number): string {
+  const d = new Date(Date.UTC(year, month0, 1));
+  let count = 0;
+  for (let i = 0; i < 45; i++) {
+    if (d.getUTCMonth() === month0 && esHabil(d)) {
+      count++;
+      if (count === n) return d.toISOString().slice(0, 10);
+    }
+    d.setUTCDate(d.getUTCDate() + 1);
+  }
+  return d.toISOString().slice(0, 10);
+}
+function proximaPILA(nit2: number, hoy: string): { fecha: string; dias: number; dh: number } {
+  const dh = (PILA_DH.find((r) => nit2 <= r.max) ?? PILA_DH[PILA_DH.length - 1]).dh;
+  const [y, m] = hoy.split("-").map(Number); // m: 1–12
+  let fecha = nthDiaHabil(y, m - 1, dh);
+  if (fecha < hoy) {
+    const ny = m === 12 ? y + 1 : y;
+    const nm0 = m === 12 ? 0 : m; // mes siguiente (0-indexado)
+    fecha = nthDiaHabil(ny, nm0, dh);
+  }
+  return { fecha, dias: daysBetween(hoy, fecha), dh };
+}
+
 export default function AportesPage() {
   const empresa = useEmpresaActiva();
   const CONTRATOS = useMemo(() => empresa?.contratos ?? [], [empresa]);
   const confirmados = useContratosConfirmados();
   const params = useParametros();
-  const [clase, setClase] = useState<ClaseRiesgo>("I");
+  const [clasePorId, setClasePorId] = useState<Record<string, ClaseRiesgo>>({});
   const [modo, setModo] = useState<Modo>("motor");
+  const nit = useNitEmpresa();
 
   const trabajadores = useMemo(
     () => [...confirmados, ...CONTRATOS].filter((c) => c.estado === "activo" && LABORALES.includes(c.tipo)),
     [confirmados, CONTRATOS]
   );
   const aportes = useMemo(
-    () => trabajadores.map((c) => calcularAportes(c, params, clase)),
-    [trabajadores, params, clase]
+    () => trabajadores.map((c) => calcularAportes(c, params, clasePorId[c.id] ?? "I")),
+    [trabajadores, params, clasePorId]
   );
+  const onClase = (id: string, cl: ClaseRiesgo) => setClasePorId((prev) => ({ ...prev, [id]: cl }));
+
+  const calendario = useMemo(
+    () => OBLIGACIONES.map((o) => ({ ...o, ...proximaObligacion(o.md, HOY) })).sort((a, b) => a.dias - b.dias),
+    []
+  );
+  const pila = useMemo(() => proximaPILA(Number(nit) || 0, HOY), [nit]);
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -64,8 +137,55 @@ export default function AportesPage() {
         </p>
       </div>
 
-      {/* Selector de modo + clase de riesgo */}
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+      {/* Calendario de obligaciones — el eje del compliance proactivo */}
+      <Card className="mb-4 overflow-hidden">
+        <CardHeader
+          overline="Calendario de obligaciones"
+          title="Cuándo debe pagar la empresa"
+          subtitle="Próximos vencimientos de prestaciones y aportes (CST + decretos). El sistema avisa antes de cada fecha."
+          right={<Calendar size={20} color="var(--red)" variant="Bulk" />}
+        />
+        {/* PILA: mensual, por NIT de la empresa (no por empleado) */}
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-border bg-surface-2 px-5 py-2.5 text-[12px]">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-ink-2">
+            <ShieldTick size={14} color="var(--red)" variant="Bold" className="shrink-0" />
+            <span className="font-medium text-ink">Pago de seguridad social (PILA)</span>
+            <span className="text-ink-3">· mensual, por NIT de la empresa (no por empleado) — Decreto 1990/2016</span>
+            <span className="text-ink-3">
+              NIT (2 díg.): <span className="font-num font-medium text-ink">{nit || "—"}</span> ·{" "}
+              <Link href="/perfil" className="underline hover:text-ink">configúralo en Perfil</Link>
+            </span>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="font-num text-[11.5px] text-ink-2">
+              {fmtDate(pila.fecha)} · {pila.dh}.º día hábil
+            </span>
+            <Badge tone={pila.dias <= 10 ? "red" : pila.dias <= 20 ? "warning" : "neutral"}>
+              en {pila.dias} días
+            </Badge>
+          </div>
+        </div>
+        <div className="divide-y divide-border">
+          {calendario.map((o) => (
+            <div key={o.nombre} className="flex items-center justify-between gap-3 px-5 py-2.5 text-[12.5px]">
+              <div className="min-w-0">
+                <div className="font-medium text-ink">{o.nombre}</div>
+                <div className="font-num text-[10.5px] text-ink-3">{o.periodicidad} · {o.norma}</div>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <span className="font-num text-[11.5px] text-ink-2">{fmtDate(o.fecha)}</span>
+                <Badge tone={o.dias <= 15 ? "red" : o.dias <= 45 ? "warning" : "neutral"}>
+                  en {o.dias} días
+                </Badge>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* Verificación: lo debido vs. lo pagado */}
+      <div className="mb-3 overline">Verificar lo debido vs. lo pagado</div>
+      <div className="mb-4 flex flex-wrap items-center gap-3">
         <div className="flex gap-1 hairline bg-surface-2 p-1">
           {([
             ["motor", "Solo cálculo", Calculator],
@@ -87,17 +207,9 @@ export default function AportesPage() {
             </button>
           ))}
         </div>
-        <label className="flex items-center gap-2 text-[12px] text-ink-2">
-          Clase de riesgo (ARL)
-          <select value={clase} onChange={(e) => setClase(e.target.value as ClaseRiesgo)} className="ap-input w-auto">
-            {(["I", "II", "III", "IV", "V"] as ClaseRiesgo[]).map((c) => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-          </select>
-        </label>
       </div>
 
-      {modo === "motor" && <ModoMotor aportes={aportes} />}
+      {modo === "motor" && <ModoMotor aportes={aportes} clasePorId={clasePorId} onClase={onClase} />}
       {modo === "planilla" && <ModoPlanilla aportes={aportes} />}
       {modo === "api" && <ModoApi />}
 
@@ -118,7 +230,15 @@ export default function AportesPage() {
 }
 
 // ── Modo 1: solo cálculo ─────────────────────────────────────────────────────
-function ModoMotor({ aportes }: { aportes: ReturnType<typeof calcularAportes>[] }) {
+function ModoMotor({
+  aportes,
+  clasePorId,
+  onClase,
+}: {
+  aportes: ReturnType<typeof calcularAportes>[];
+  clasePorId: Record<string, ClaseRiesgo>;
+  onClase: (id: string, cl: ClaseRiesgo) => void;
+}) {
   const [sel, setSel] = useState(0);
   const totSS = aportes.reduce((s, a) => s + a.totalSeguridadSocial, 0);
   const totProv = aportes.reduce((s, a) => s + a.totalProvisiones, 0);
@@ -129,29 +249,43 @@ function ModoMotor({ aportes }: { aportes: ReturnType<typeof calcularAportes>[] 
       <div className="lg:col-span-3">
         <Card className="overflow-hidden">
           <div className="grid grid-cols-12 gap-2 border-b border-border bg-surface-2 px-5 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-ink-3">
-            <div className="col-span-5">Trabajador</div>
+            <div className="col-span-4">Trabajador</div>
+            <div className="col-span-2">ARL</div>
             <div className="col-span-2 text-right">IBC</div>
-            <div className="col-span-3 text-right">Seg. social/mes</div>
-            <div className="col-span-2 text-right">Provisión/mes</div>
+            <div className="col-span-2 text-right">Seg. social</div>
+            <div className="col-span-2 text-right">Provisión</div>
           </div>
           <div className="divide-y divide-border">
             {aportes.map((a, i) => (
-              <button
+              <div
                 key={a.contratoId}
-                onClick={() => setSel(i)}
-                className="grid w-full grid-cols-12 items-center gap-2 px-5 py-2.5 text-left text-[12.5px] transition-colors hover:bg-surface-2"
+                className="grid grid-cols-12 items-center gap-2 px-5 py-2 text-[12.5px]"
                 style={{ background: i === sel ? "var(--surface-2)" : undefined }}
               >
-                <div className="col-span-5 font-medium text-ink">{a.empleado}</div>
+                <button onClick={() => setSel(i)} className="col-span-4 truncate text-left font-medium text-ink hover:text-red">
+                  {a.empleado}
+                </button>
+                <div className="col-span-2">
+                  <select
+                    value={clasePorId[a.contratoId] ?? "I"}
+                    onChange={(e) => onClase(a.contratoId, e.target.value as ClaseRiesgo)}
+                    className="ap-input w-auto py-1 text-[11.5px]"
+                    title="Clase de riesgo ARL de este cargo"
+                  >
+                    {(["I", "II", "III", "IV", "V"] as ClaseRiesgo[]).map((cl) => (
+                      <option key={cl} value={cl}>{cl}</option>
+                    ))}
+                  </select>
+                </div>
                 <div className="col-span-2 text-right font-num text-ink-2">{cop(a.ibc)}</div>
-                <div className="col-span-3 text-right font-num text-ink">{cop(a.totalSeguridadSocial)}</div>
+                <div className="col-span-2 text-right font-num text-ink">{cop(a.totalSeguridadSocial)}</div>
                 <div className="col-span-2 text-right font-num text-ink-2">{cop(a.totalProvisiones)}</div>
-              </button>
+              </div>
             ))}
           </div>
           <div className="grid grid-cols-12 gap-2 border-t-2 border-border-strong bg-surface-2 px-5 py-3 text-[12.5px]">
-            <div className="col-span-7 font-head text-ink">Total nómina laboral / mes</div>
-            <div className="col-span-3 text-right font-num text-ink">{cop(totSS)}</div>
+            <div className="col-span-8 font-head text-ink">Total nómina laboral / mes</div>
+            <div className="col-span-2 text-right font-num text-ink">{cop(totSS)}</div>
             <div className="col-span-2 text-right font-num text-ink-2">{cop(totProv)}</div>
           </div>
         </Card>
