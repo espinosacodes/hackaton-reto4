@@ -161,7 +161,14 @@ export function addContratoConfirmado(c: Contrato) {
 }
 
 function useStore<T>(key: string, fallback: T): T {
-  const [val, setVal] = useState<T>(fallback);
+  // Inicializador perezoso: lee localStorage de forma síncrona en el primer
+  // render del CLIENTE. Así un componente recién montado ya tiene el valor real
+  // (no el fallback), evitando un estado transitorio nulo que rompía las páginas
+  // del panel (p. ej. empresa/contratos undefined en el primer render). En el
+  // servidor `read` devuelve el fallback (no hay window), y el panel no se
+  // renderiza en SSR (AuthGate retorna null hasta montar), por lo que no hay
+  // desajuste de hidratación.
+  const [val, setVal] = useState<T>(() => read<T>(key, fallback));
   useEffect(() => {
     const sync = () => setVal(read<T>(key, fallback));
     sync();
