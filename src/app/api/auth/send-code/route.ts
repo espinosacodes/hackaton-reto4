@@ -1,9 +1,10 @@
 // Genera un código de un solo uso (verificación de cuenta o reseteo de
-// contraseña), lo envía por correo (Resend) y devuelve su hash al cliente.
-// El código en claro solo viaja por email; el cliente compara contra el hash.
+// contraseña), guarda su HASH en DynamoDB (tabla con TTL) y lo envía por correo
+// (Resend). El código en claro solo viaja por email; nunca se devuelve al cliente.
 // Sin RESEND_API_KEY → modo demo: devuelve el código para mostrarlo en pantalla.
 
-import { enviarCorreo, hashCodigo, htmlCodigo } from "@/lib/email";
+import { enviarCorreo, htmlCodigo } from "@/lib/email";
+import { guardarCodigo } from "@/lib/accounts-server";
 
 export async function POST(req: Request) {
   let body: { email?: string; nombre?: string; proposito?: string };
@@ -18,18 +19,22 @@ export async function POST(req: Request) {
   if (!email) return Response.json({ error: "Correo requerido" }, { status: 400 });
 
   const codigo = String(Math.floor(100000 + Math.random() * 900000));
-  const hash = hashCodigo(codigo, email, proposito);
   const asunto =
-    proposito === "reset"
-      ? "Restablece tu contraseña — Centinela"
-      : "Verifica tu cuenta — Centinela";
+    proposito === "reset" ? "Restablece tu contraseña — Centinela" : "Verifica tu cuenta — Centinela";
+
+  try {
+    await guardarCodigo(email, proposito, codigo);
+  } catch (err) {
+    console.error("send-code: error al guardar el código:", err);
+    return Response.json({ error: "Error de servidor. Intenta de nuevo." }, { status: 500 });
+  }
 
   try {
     const enviado = await enviarCorreo(email, asunto, htmlCodigo(String(body.nombre ?? ""), codigo, proposito));
-    // Si no hay servicio de correo, o el envío falla, mostramos el código en pantalla (fallback).
-    return Response.json(enviado ? { hash } : { hash, demoCodigo: codigo });
+    // Sin servicio de correo (o si falla), mostramos el código en pantalla (fallback demo).
+    return Response.json(enviado ? { ok: true } : { ok: true, demoCodigo: codigo });
   } catch (err) {
     console.error("send-code: fallo de envío, fallback a pantalla:", err);
-    return Response.json({ hash, demoCodigo: codigo });
+    return Response.json({ ok: true, demoCodigo: codigo });
   }
 }
