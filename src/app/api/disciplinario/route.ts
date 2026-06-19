@@ -19,6 +19,10 @@ interface Body {
   normaInterna?: string;
   planUsuario?: string;
   documentos?: DocCtx[];
+  // Contexto acumulado del proceso (lo aprovecha sobre todo la etapa de decisión).
+  preguntasRespuestas?: string;
+  oportunidadPruebas?: string;
+  pruebasAportadas?: boolean;
 }
 
 // Asesoría determinista por etapa, para la demo sin proveedor de IA.
@@ -75,6 +79,21 @@ function construirPrompt(b: Body): string {
   const docs = (b.documentos ?? [])
     .map((d) => `### ${d.tipo} — ${d.nombre}\n${(d.texto ?? "").slice(0, 4000)}`)
     .join("\n\n");
+
+  // Contexto del expediente: descargos y pruebas, útil para valorar/decidir.
+  const expediente = [
+    b.preguntasRespuestas?.trim() ? `Diligencia de descargos (preguntas y respuestas):\n"""${b.preguntasRespuestas.trim()}"""` : "",
+    b.oportunidadPruebas?.trim() ? `Pruebas y oportunidad: """${b.oportunidadPruebas.trim()}"""` : "",
+    typeof b.pruebasAportadas === "boolean" ? `¿El trabajador aportó pruebas? ${b.pruebasAportadas ? "Sí" : "No"}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const cierreDecision =
+    b.etapa === "decision"
+      ? "\n\nComo es la etapa de DECISIÓN, valora conjuntamente los descargos, las pruebas y la situación planteada y entrega tu CONSIDERACIÓN sobre qué debería hacerse (sanción proporcional, archivo o terminación con justa causa) y por qué. Recomienda y motiva; NO impongas la decisión: el abogado y la empresa deciden."
+      : "";
+
   return `CASO DISCIPLINARIO
 Trabajador: ${b.empleado ?? "—"} (${b.cargo ?? "—"})
 Hechos (${b.fechaHechos ?? "—"}): ${b.hechos ?? "—"}
@@ -82,12 +101,12 @@ Causal invocada: ${b.causalTexto ?? "—"}
 Norma interna señalada: ${b.normaInterna ?? "—"}
 Etapa actual del proceso: ${b.etapaTitulo ?? b.etapa ?? "—"}
 Garantías que deben cubrirse en esta etapa: ${(b.garantias ?? []).join("; ") || "—"}
-
+${expediente ? `\nEXPEDIENTE HASTA AHORA:\n${expediente}\n` : ""}
 ${b.planUsuario?.trim() ? `Lo que la empresa piensa hacer: """${b.planUsuario.trim()}"""` : "La empresa aún no ha indicado qué hará."}
 
 ${docs ? `BASES NORMATIVAS INTERNAS (Perfil de la empresa):\n${docs}` : "No se cargaron documentos internos en el Perfil."}
 
-Asesora a la empresa para esta etapa: qué debe hacer, con qué fundamento, qué riesgos evitar y cuál es el siguiente paso. Si la empresa indicó un plan, evalúalo.`;
+Asesora a la empresa para esta etapa: qué debe hacer, con qué fundamento, qué riesgos evitar y cuál es el siguiente paso. Si la empresa indicó un plan, evalúalo.${cierreDecision}`;
 }
 
 export async function POST(req: NextRequest) {
