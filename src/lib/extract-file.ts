@@ -162,3 +162,30 @@ export async function extractTextFromUrl(url: string): Promise<string> {
   const file = new File([blob], name, { type: blob.type });
   return extractTextFromFile(file);
 }
+
+// Lee un archivo de Google Drive por su id (vía /api/drive, con cuenta de servicio)
+// y extrae su texto reutilizando el mismo flujo que un archivo local.
+export async function extractTextFromDriveFile(fileId: string, nombre: string): Promise<string> {
+  let res: Response;
+  try {
+    res = await fetch(`/api/drive?fileId=${encodeURIComponent(fileId)}`);
+  } catch {
+    throw new FileExtractError("No se pudo conectar con Google Drive.");
+  }
+  if (!res.ok) {
+    let msg = "No se pudo leer el archivo de Google Drive.";
+    try {
+      const j = (await res.json()) as { error?: string };
+      if (j?.error) msg = j.error;
+    } catch {
+      /* respuesta sin JSON */
+    }
+    throw new FileExtractError(msg);
+  }
+  const blob = await res.blob();
+  if (blob.size > MAX_FILE_BYTES) {
+    throw new FileExtractError("El documento supera el límite de 12 MB.");
+  }
+  const file = new File([blob], nombre || "documento", { type: blob.type });
+  return extractTextFromFile(file);
+}
