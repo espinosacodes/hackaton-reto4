@@ -21,7 +21,7 @@ export const NAV: NavItem[] = [
   { href: "/", label: "Resumen", icon: Element4, desc: "Panel de compliance" },
   { href: "/contratos", label: "Contratos", icon: DocumentText, desc: "Lectura contractual IA" },
   { href: "/liquidaciones", label: "Liquidaciones", icon: Calculator, desc: "Verificación de prestaciones" },
-  { href: "/aportes", label: "Aportes", icon: ShieldTick, desc: "Seguridad social y provisiones" },
+  { href: "/aportes", label: "Aportes", icon: ShieldTick, desc: "Seguridad social, provisiones y dotación" },
   { href: "/alertas", label: "Alertas", icon: Warning2, desc: "Vencimientos y obligaciones" },
   { href: "/disciplinario", label: "Disciplinario", icon: Judge, desc: "Debido proceso y pliego" },
   { href: "/reclasificacion", label: "Reclasificación", icon: Convertshape2, desc: "Riesgo de vínculo laboral" },

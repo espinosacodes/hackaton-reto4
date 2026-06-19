@@ -60,11 +60,17 @@ export default function LiquidacionesPage() {
   const [nuevoMes, setNuevoMes] = useState("");
   const [novedades, setNovedades] = useState<{ id: number; tipo: TipoHora; horas: string; mes: string }[]>([]);
 
+  // Fecha efectiva de un recargo: en "acumulado" usa el mes en que ocurrió, para que
+  // se aplique la TARIFA DE RECARGO de ese año (cambia por la Ley 2466/2025); si no,
+  // la fecha de retiro. Así un caso de varios años con tarifas distintas queda bien.
+  const fechaRecargo = (n: { mes: string }) => (n.mes ? `${n.mes}-15` : hasta);
+
   const sumaHorasExtra = useMemo(
     () =>
       novedades.reduce((s, n) => {
         const h = Number(n.horas.replace(/[^\d.]/g, "")) || 0;
-        return s + calcularRecargo(contrato.salarioMensual, n.tipo, h, hasta, contrato.horasSemana).total;
+        const fecha = n.mes ? `${n.mes}-15` : hasta;
+        return s + calcularRecargo(contrato.salarioMensual, n.tipo, h, fecha, contrato.horasSemana).total;
       }, 0),
     [novedades, contrato, hasta]
   );
@@ -163,6 +169,11 @@ export default function LiquidacionesPage() {
                   <option value="periodo">Liquidación del periodo (definitiva)</option>
                   <option value="acumulado">Pasivo acumulado (mora total)</option>
                 </select>
+                <p className="mt-1.5 text-[11px] leading-snug text-ink-3">
+                  {modo === "periodo"
+                    ? "Liquidación definitiva: prestaciones del periodo en curso, asumiendo que los periodos anteriores ya se pagaron."
+                    : "Pasivo acumulado: estima TODO lo que se le adeuda al trabajador desde la fecha indicada abajo (útil para medir la contingencia si nunca se pagó)."}
+                </p>
               </Field>
               <Field label="Fecha de retiro">
                 <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className="input" />
@@ -273,7 +284,7 @@ export default function LiquidacionesPage() {
                     .sort((a, b) => (modo === "acumulado" ? a.mes.localeCompare(b.mes) : 0))
                     .map((n) => {
                       const h = Number(n.horas.replace(/[^\d.]/g, "")) || 0;
-                      const r = calcularRecargo(contrato.salarioMensual, n.tipo, h, hasta, contrato.horasSemana);
+                      const r = calcularRecargo(contrato.salarioMensual, n.tipo, h, fechaRecargo(n), contrato.horasSemana);
                       return (
                         <div key={n.id} className="flex items-center gap-2 px-3 py-1.5 text-[11.5px]">
                           <span className="min-w-0 flex-1 truncate text-ink-2">

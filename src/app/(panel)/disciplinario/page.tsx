@@ -9,12 +9,24 @@ import {
   ETAPAS,
   etapaInfo,
   generarDocumento,
+  rellenarPlantilla,
   type CasoDisciplinario,
   type EtapaDisciplinaria,
 } from "@/lib/debido-proceso";
 import { JUSTAS_CAUSAS_EMPLEADOR } from "@/lib/data/justas-causas";
-import { useContratosConfirmados, useDocumentosPerfil, useEmpresaActiva, logAudit } from "@/lib/store";
+import {
+  useContratosConfirmados,
+  useDocumentosPerfil,
+  useEmpresaActiva,
+  logAudit,
+  usePlantillas,
+  addPlantilla,
+  removePlantilla,
+  useLogoEmpresa,
+  setLogoEmpresa,
+} from "@/lib/store";
 import { extractTextFromFile, ACCEPTED_FILE_TYPES } from "@/lib/extract-file";
+import { imprimirDocumento } from "@/lib/imprimir";
 import { EvidenciaPanel } from "@/components/EvidenciaPanel";
 import {
   Judge,
@@ -47,6 +59,8 @@ export default function DisciplinarioPage() {
   const EMPRESA = empresa?.nombre ?? "—";
   const confirmados = useContratosConfirmados();
   const docsPerfil = useDocumentosPerfil();
+  const plantillas = usePlantillas();
+  const logoEmpresa = useLogoEmpresa();
   const todos = useMemo(() => [...confirmados, ...CONTRATOS], [confirmados, CONTRATOS]);
 
   const [trabajadorId, setTrabajadorId] = useState(
@@ -96,6 +110,11 @@ export default function DisciplinarioPage() {
   // Fuero / estabilidad reforzada: soporte (autorización del inspector, solicitud, etc.).
   const fueroInputRef = useRef<HTMLInputElement>(null);
   const [fueroSoporte, setFueroSoporte] = useState("");
+  // Plantillas y logo de la empresa (para que los escritos salgan con su formato).
+  const plantillaInputRef = useRef<HTMLInputElement>(null);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  const [plantillaTipo, setPlantillaTipo] = useState("notificacion");
+  const [errorPlantilla, setErrorPlantilla] = useState<string | null>(null);
 
   const caso: CasoDisciplinario = {
     empresa: EMPRESA,
@@ -188,8 +207,17 @@ export default function DisciplinarioPage() {
   }
 
   function generar(tipo: string, label: string) {
-    setDocumento({ texto: generarDocumento(tipo, caso), titulo: label });
-    logAudit("Documento disciplinario generado", `${label} — ${trab.empleado}`);
+    // Si la empresa cargó una plantilla para este tipo de documento, se rellena
+    // con el caso (sale con su formato); si no, se usa la plantilla estándar.
+    const plantilla = plantillas.find((p) => p.tipo === tipo);
+    const texto = plantilla
+      ? rellenarPlantilla(plantilla.texto, caso, trab.documento)
+      : generarDocumento(tipo, caso);
+    setDocumento({ texto, titulo: plantilla ? `${label} (plantilla «${plantilla.nombre}»)` : label });
+    logAudit(
+      "Documento disciplinario generado",
+      `${label} — ${trab.empleado}${plantilla ? ` · plantilla «${plantilla.nombre}»` : ""}`,
+    );
   }
 
   function cargarFueroSoporte(file: File) {
@@ -217,24 +245,44 @@ export default function DisciplinarioPage() {
     }
   }
 
-  // Genera un PDF imprimible (el navegador permite «Guardar como PDF»).
+  // Genera un PDF imprimible (el navegador permite «Guardar como PDF»),
+  // con el logo de la empresa si se cargó.
   function descargarPDF(texto: string, titulo: string) {
-    const w = window.open("", "_blank");
-    if (!w) return;
-    const safe = texto.replace(/[&<>]/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[m] as string));
-    w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${titulo} — ${EMPRESA}</title>
-<style>
-  @page { margin: 2.2cm; }
-  body { font-family: Georgia, 'Times New Roman', serif; color: #16181d; font-size: 12px; line-height: 1.6; }
-  pre { white-space: pre-wrap; font-family: inherit; margin: 0; }
-  .pie { margin-top: 28px; font-size: 10px; color: #6b7280; border-top: 1px solid #d1d5db; padding-top: 8px; }
-</style></head><body><pre>${safe}</pre>
-<div class="pie">Documento generado con Centinela — requiere revisión y firma del abogado responsable.</div>
-<script>window.onload = function(){ window.print(); }<\/script>
-</body></html>`);
-    w.document.close();
+    imprimirDocumento(texto, titulo, EMPRESA, logoEmpresa);
     logAudit("Documento exportado a PDF", `${titulo} — ${trab.empleado}`);
   }
+
+  async function cargarPlantilla(file: File) {
+    setErrorPlantilla(null);
+    try {
+      const texto = await extractTextFromFile(file);
+      addPlantilla({ tipo: plantillaTipo, nombre: file.name, texto, ts: new Date().toISOString() });
+      logAudit("Plantilla disciplinaria cargada", `${file.name} → ${plantillaTipo}`);
+    } catch (e) {
+      setErrorPlantilla(e instanceof Error ? e.message : "No se pudo leer la plantilla.");
+    }
+  }
+
+  function cargarLogo(file: File) {
+    setErrorPlantilla(null);
+    if (!file.type.startsWith("image/")) {
+      setErrorPlantilla("El logo debe ser una imagen (PNG, JPG o WEBP).");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setLogoEmpresa(String(reader.result));
+      logAudit("Logo de empresa cargado", file.name);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  const TIPOS_PLANTILLA: { tipo: string; label: string }[] = [
+    { tipo: "citacion", label: "Citación a descargos" },
+    { tipo: "acta", label: "Acta de descargos" },
+    { tipo: "decision", label: "Decisión motivada" },
+    { tipo: "notificacion", label: "Notificación de decisión" },
+  ];
 
   function cambiarEtapa(k: EtapaDisciplinaria) {
     setEtapa(k);
@@ -275,6 +323,86 @@ export default function DisciplinarioPage() {
         </div>
       )}
 
+      {/* Plantillas y logo de la empresa (formato de los escritos) */}
+      <Card className="mb-3">
+        <details>
+          <summary className="flex cursor-pointer items-center gap-2 px-5 py-3.5 text-[13px] font-medium text-ink">
+            <DocumentText size={16} color="var(--red)" variant="Bold" />
+            Plantillas y logo de la empresa
+            <span className="font-normal text-ink-3">· {plantillas.length} plantilla(s){logoEmpresa ? " · logo cargado" : ""}</span>
+          </summary>
+          <div className="space-y-3 border-t border-border px-5 py-4">
+            <p className="text-[12px] leading-snug text-ink-2">
+              Sube el formato propio de la empresa para que los escritos (citación, notificación…) se generen
+              con su letra, estructura y logo. Los marcadores entre corchetes <span className="font-mono">[ASÍ]</span> se
+              rellenan con los datos del caso; lo que no se reconozca queda para que el abogado lo complete.
+            </p>
+
+            {/* Carga de plantilla por tipo */}
+            <div className="flex flex-wrap items-end gap-2">
+              <label className="block">
+                <span className="overline mb-1 block">Tipo de documento</span>
+                <select
+                  className="dx"
+                  value={plantillaTipo}
+                  onChange={(e) => setPlantillaTipo(e.target.value)}
+                >
+                  {TIPOS_PLANTILLA.map((t) => (
+                    <option key={t.tipo} value={t.tipo}>{t.label}</option>
+                  ))}
+                </select>
+              </label>
+              <input
+                ref={plantillaInputRef}
+                type="file"
+                accept={ACCEPTED_FILE_TYPES}
+                className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) cargarPlantilla(f); e.target.value = ""; }}
+              />
+              <Button variant="secondary" onClick={() => plantillaInputRef.current?.click()}>
+                <DocumentUpload size={15} color="var(--red)" /> Subir plantilla
+              </Button>
+              <input
+                ref={logoInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) cargarLogo(f); e.target.value = ""; }}
+              />
+              <Button variant="secondary" onClick={() => logoInputRef.current?.click()}>
+                <DocumentUpload size={15} color="var(--red)" /> {logoEmpresa ? "Cambiar logo" : "Subir logo"}
+              </Button>
+              {logoEmpresa && (
+                <button onClick={() => setLogoEmpresa(null)} className="text-[12px] text-ink-3 underline hover:text-red">
+                  Quitar logo
+                </button>
+              )}
+            </div>
+
+            {errorPlantilla && <p className="text-[12px] text-red-dark">{errorPlantilla}</p>}
+
+            {plantillas.length > 0 && (
+              <div className="hairline divide-y divide-border">
+                {plantillas.map((p) => (
+                  <div key={p.tipo} className="flex items-center justify-between gap-2 px-3 py-2 text-[12px]">
+                    <span className="min-w-0 truncate text-ink-2">
+                      <span className="font-medium text-ink">{TIPOS_PLANTILLA.find((t) => t.tipo === p.tipo)?.label ?? p.tipo}</span> · {p.nombre}
+                    </span>
+                    <button onClick={() => removePlantilla(p.tipo)} className="shrink-0 text-ink-3 hover:text-red" title="Quitar plantilla">
+                      <Warning2 size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {logoEmpresa && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={logoEmpresa} alt="Logo de la empresa" className="max-h-12 max-w-[200px]" />
+            )}
+          </div>
+        </details>
+      </Card>
+
       {/* Datos del caso */}
       <Card>
         <CardHeader overline="Caso" title="Trabajador y hechos" right={<Judge size={20} color="var(--red)" variant="Bulk" />} />
@@ -306,12 +434,13 @@ export default function DisciplinarioPage() {
               </span>
               {mostrarInfo && (
                 <div className="hairline mb-2 bg-[var(--info-tint)] px-3 py-2 text-[11.5px] leading-snug text-ink-2">
-                  <p className="mb-1 font-medium text-ink">Describe la conducta de forma concreta y objetiva:</p>
+                  <p className="mb-1 font-medium text-ink">Describe la conducta de forma concreta y objetiva, respondiendo:</p>
                   <ul className="list-disc space-y-0.5 pl-4">
-                    <li><span className="font-medium">Qué pasó</span> (acción u omisión), sin calificarla jurídicamente.</li>
-                    <li><span className="font-medium">Cuándo y dónde</span> (fechas, lugar, turno).</li>
-                    <li><span className="font-medium">Quiénes</span> intervinieron y cómo se conoció el hecho.</li>
-                    <li><span className="font-medium">Evidencia</span> que lo respalda (correos, registros, testigos).</li>
+                    <li><span className="font-medium">¿Qué pasó?</span> (acción u omisión), sin calificarla jurídicamente.</li>
+                    <li><span className="font-medium">¿Cuándo y dónde?</span> (fechas, lugar, turno).</li>
+                    <li><span className="font-medium">¿Quiénes intervinieron</span> y cómo se conoció el hecho?</li>
+                    <li><span className="font-medium">¿Qué evidencia</span> lo respalda? (correos, registros, testigos).</li>
+                    <li><span className="font-medium">¿Antes ha ocurrido?</span> (antecedentes o reincidencia: influye en la proporcionalidad de la sanción).</li>
                   </ul>
                   <p className="mt-1 text-ink-3">
                     Ej.: «El 10/06/2026 el trabajador no asistió a su turno (7:00–16:00) sin justificación ni aviso, según el

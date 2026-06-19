@@ -30,7 +30,11 @@ export const ExtraccionSchema = z.object({
   salarioIntegral: z.boolean(),
   fechaInicio: z.string().describe("AAAA-MM-DD"),
   fechaFin: z.string().describe("AAAA-MM-DD o cadena vacía si es indefinido"),
-  obligaciones: z.array(z.string()),
+  obligaciones: z
+    .array(z.string())
+    .describe(
+      "Obligaciones PERIÓDICAS DEL EMPLEADOR que se derivan de este vínculo (prestaciones y aportes a su cargo): p. ej. 'Seguridad social (salud, pensión, ARL)', 'Aportes parafiscales', 'Prima de servicios', 'Cesantías', 'Intereses a las cesantías', 'Vacaciones', 'Auxilio de transporte' (si el salario es ≤ 2 SMMLV), 'Dotación' (si ≤ 2 SMMLV). NO listes los deberes del trabajador. En prestación de servicios la seguridad social la asume el contratista: déjalo vacío o indícalo en observaciones.",
+    ),
   confianza: z.number().describe("0 a 1"),
   observaciones: z.string().describe("Riesgos o ambigüedades para que el abogado revise"),
 });
@@ -83,7 +87,8 @@ const JSON_HINT = `Responde ÚNICAMENTE con un objeto JSON válido con esta form
   "horasSemana": number, "salarioMensual": number,
   "auxilioTransporte": boolean, "salarioIntegral": boolean,
   "fechaInicio": "AAAA-MM-DD", "fechaFin": "AAAA-MM-DD" o "",
-  "obligaciones": string[], "confianza": number (0..1), "observaciones": string
+  "obligaciones": string[],  // OBLIGACIONES PERIÓDICAS DEL EMPLEADOR (seguridad social, parafiscales, prima, cesantías, intereses, vacaciones, auxilio de transporte si ≤2 SMMLV, dotación). NO los deberes del trabajador.
+  "confianza": number (0..1), "observaciones": string
 }`;
 
 function userPrompt(text: string) {

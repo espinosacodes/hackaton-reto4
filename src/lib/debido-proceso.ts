@@ -296,6 +296,34 @@ function fundamento(c: CasoDisciplinario): string {
   return `${causal}${interna}${fuente}`;
 }
 
+/**
+ * Rellena una PLANTILLA cargada por la empresa: sustituye los marcadores entre
+ * corchetes [ASÍ] por los datos del caso. Lo que no reconoce lo deja intacto
+ * (para que el abogado lo complete). `documento` es la cédula del trabajador.
+ */
+export function rellenarPlantilla(texto: string, c: CasoDisciplinario, documento?: string): string {
+  const hoy = new Date().toISOString().slice(0, 10);
+  const sancion =
+    c.tipoNotificacion === "despido" ? "TERMINACIÓN DEL CONTRATO CON JUSTA CAUSA" : (c.decision || "");
+  return texto.replace(/\[([^\]]+)\]/g, (match, inner) => {
+    const k = inner.toUpperCase();
+    const has = (...ws: string[]) => ws.some((w) => k.includes(w));
+    if (has("RAZÓN SOCIAL", "RAZON SOCIAL") || (has("EMPRESA") && !has("TRABAJADOR"))) return c.empresa;
+    if (has("NOMBRE") && has("TRABAJADOR")) return c.empleado;
+    if (has("CÉDULA", "CEDULA", "NÚMERO DE DOCUMENTO", "NUMERO DE DOCUMENTO") && documento) return documento;
+    if (has("CARGO") && has("TRABAJADOR")) return c.cargo;
+    if (has("CARGO") && !has("SUSCRIBE")) return c.cargo;
+    if (has("RELACIÓN", "RELACION", "HECHOS")) return `El día ${c.fechaHechos}: ${c.hechos}`;
+    if (has("FUNDAMENTACIÓN", "FUNDAMENTACION", "NORMAS APLICABLES")) {
+      return [c.causalTexto, c.normaInterna].filter(Boolean).join("; ") || match;
+    }
+    if (has("DESCRIPCIÓN", "DESCRIPCION") && has("SANCIÓN", "SANCION")) return sancion || match;
+    if (has("DECISIÓN", "DECISION")) return c.decision || match;
+    if (has("FECHA")) return hoy;
+    return match; // desconocido: lo deja para que el abogado lo llene
+  });
+}
+
 /** Genera el documento que corresponde a la etapa indicada. */
 export function generarDocumento(tipo: string, c: CasoDisciplinario): string {
   if (tipo === "hechos") return generarHechos(c);

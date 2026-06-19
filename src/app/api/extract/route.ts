@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { extraerContrato, resolveProvider } from "@/lib/llm";
+import { obligacionesEmpleador } from "@/lib/aportes";
 
 // Fallback determinista para la demo cuando no hay ningún proveedor configurado.
 function mockExtraccion(text: string) {
@@ -21,7 +22,7 @@ function mockExtraccion(text: string) {
     salarioIntegral: lower.includes("integral"),
     fechaInicio: "2025-01-01",
     fechaFin: tipo === "fijo" ? "2025-12-31" : "",
-    obligaciones: ["Pago de seguridad social", "Prima de servicios", "Vacaciones"],
+    obligaciones: obligacionesEmpleador(tipo, 1_750_905, lower.includes("integral")),
     confianza: 0.55,
     observaciones:
       "Extracción simulada (sin proveedor de IA configurado). Define una API key (ANTHROPIC/OPENAI/DEEPSEEK/GEMINI) para análisis real.",

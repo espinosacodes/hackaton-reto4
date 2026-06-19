@@ -11,6 +11,10 @@ function ext(name: string): string {
   return name.slice(name.lastIndexOf(".") + 1).toLowerCase();
 }
 
+// Tiempo máximo para leer un PDF antes de abortar (evita el "Leyendo archivo…"
+// infinito que se veía con ciertos PDF reales cuyo worker no resolvía nunca).
+const PDF_TIMEOUT_MS = 45_000;
+
 async function extractPdf(file: File): Promise<string> {
   const pdfjs = await import("pdfjs-dist");
   // Worker servido desde /public (estable en Turbopack dev y en Vercel).
@@ -18,19 +22,47 @@ async function extractPdf(file: File): Promise<string> {
   pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
 
   const buf = await file.arrayBuffer();
-  const task = pdfjs.getDocument({ data: new Uint8Array(buf) });
-  const doc = await task.promise;
-  const partes: string[] = [];
-  for (let p = 1; p <= doc.numPages; p++) {
-    const page = await doc.getPage(p);
-    const content = await page.getTextContent();
-    const linea = content.items
-      .map((it) => ("str" in it ? it.str : ""))
-      .join(" ");
-    partes.push(linea);
+  const task = pdfjs.getDocument({
+    data: new Uint8Array(buf),
+    // Recursos necesarios para PDF del mundo real (contratos exportados desde
+    // Word/LibreOffice): mapas de caracteres y fuentes estándar. Sin ellos, el
+    // texto salía vacío o ilegible y parecía que "no leía el PDF". Se sirven
+    // como estáticos desde /public/pdfjs (copiados de pdfjs-dist).
+    cMapUrl: "/pdfjs/cmaps/",
+    cMapPacked: true,
+    standardFontDataUrl: "/pdfjs/standard_fonts/",
+    // Sin sistema de fuentes del navegador no hace falta renderizar: solo texto.
+    disableFontFace: true,
+  });
+
+  // Carrera contra un timeout: si el worker se cuelga, abortamos con un error
+  // claro en vez de dejar la interfaz girando para siempre.
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new FileExtractError(
+        "La lectura del PDF tardó demasiado y se canceló. Conviértalo a DOCX/TXT o pegue el texto manualmente.",
+      )),
+      PDF_TIMEOUT_MS,
+    );
+  });
+
+  try {
+    const doc = await Promise.race([task.promise, timeout]);
+    const partes: string[] = [];
+    for (let p = 1; p <= doc.numPages; p++) {
+      const page = await Promise.race([doc.getPage(p), timeout]);
+      const content = await Promise.race([page.getTextContent(), timeout]);
+      const linea = content.items
+        .map((it) => ("str" in it ? it.str : ""))
+        .join(" ");
+      partes.push(linea);
+    }
+    return partes.join("\n").replace(/[ \t]+/g, " ").trim();
+  } finally {
+    clearTimeout(timer);
+    task.destroy().catch(() => {});
   }
-  await task.destroy();
-  return partes.join("\n").replace(/[ \t]+/g, " ").trim();
 }
 
 async function extractDocx(file: File): Promise<string> {
@@ -83,13 +115,35 @@ export async function extractTextFromFile(file: File): Promise<string> {
 // cualquier URL HTTPS) y extrae su texto reutilizando el mismo flujo que la
 // carga local. El bucket debe permitir CORS para que el navegador lo lea.
 export async function extractTextFromUrl(url: string): Promise<string> {
-  let res: Response;
+  // Primero intentamos el proxy del servidor (evita el bloqueo CORS de la mayoría
+  // de nubes, incluido Google Drive). Si no hay servidor (demo estática) o el
+  // proxy no responde, caemos a la descarga directa desde el navegador.
+  let res: Response | null = null;
   try {
-    res = await fetch(url);
-  } catch {
-    throw new FileExtractError(
-      "No se pudo conectar con el bucket. Verifique la URL y que el almacenamiento permita acceso CORS desde el navegador.",
-    );
+    const viaProxy = await fetch(`/api/fetch-doc?url=${encodeURIComponent(url)}`);
+    if (viaProxy.ok) {
+      res = viaProxy;
+    } else {
+      // El proxy existe pero rechazó: propagamos su mensaje (Drive, permisos, etc.).
+      const ct = viaProxy.headers.get("content-type") ?? "";
+      if (ct.includes("application/json")) {
+        const body = (await viaProxy.json().catch(() => null)) as { error?: string } | null;
+        if (body?.error) throw new FileExtractError(body.error);
+      }
+    }
+  } catch (err) {
+    if (err instanceof FileExtractError) throw err;
+    // Sin servidor → intento directo abajo.
+  }
+
+  if (!res) {
+    try {
+      res = await fetch(url);
+    } catch {
+      throw new FileExtractError(
+        "No se pudo conectar con el bucket. Verifique la URL y que el almacenamiento permita acceso CORS desde el navegador (o use Google Drive con el archivo compartido públicamente).",
+      );
+    }
   }
   if (!res.ok) {
     throw new FileExtractError(
@@ -106,5 +160,32 @@ export async function extractTextFromUrl(url: string): Promise<string> {
   const path = url.split(/[?#]/)[0];
   const name = decodeURIComponent(path.slice(path.lastIndexOf("/") + 1)) || "documento.txt";
   const file = new File([blob], name, { type: blob.type });
+  return extractTextFromFile(file);
+}
+
+// Lee un archivo de Google Drive por su id (vía /api/drive, con cuenta de servicio)
+// y extrae su texto reutilizando el mismo flujo que un archivo local.
+export async function extractTextFromDriveFile(fileId: string, nombre: string): Promise<string> {
+  let res: Response;
+  try {
+    res = await fetch(`/api/drive?fileId=${encodeURIComponent(fileId)}`);
+  } catch {
+    throw new FileExtractError("No se pudo conectar con Google Drive.");
+  }
+  if (!res.ok) {
+    let msg = "No se pudo leer el archivo de Google Drive.";
+    try {
+      const j = (await res.json()) as { error?: string };
+      if (j?.error) msg = j.error;
+    } catch {
+      /* respuesta sin JSON */
+    }
+    throw new FileExtractError(msg);
+  }
+  const blob = await res.blob();
+  if (blob.size > MAX_FILE_BYTES) {
+    throw new FileExtractError("El documento supera el límite de 12 MB.");
+  }
+  const file = new File([blob], nombre || "documento", { type: blob.type });
   return extractTextFromFile(file);
 }

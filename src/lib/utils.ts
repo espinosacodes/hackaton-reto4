@@ -24,6 +24,15 @@ export function copShort(value: number): string {
   return `$${value.toFixed(0)}`;
 }
 
+/**
+ * Normaliza texto para búsquedas tolerantes a tildes: minúsculas + sin
+ * diacríticos. Así "Maria" encuentra "María" y "reclasificacion" → "Reclasificación".
+ */
+const DIACRITICS = /[̀-ͯ]/g;
+export function norm(s: string): string {
+  return s.normalize("NFD").replace(DIACRITICS, "").toLowerCase().trim();
+}
+
 export function fmtDate(d: string | Date): string {
   const date = typeof d === "string" ? new Date(d + "T00:00:00") : d;
   return date.toLocaleDateString("es-CO", {
