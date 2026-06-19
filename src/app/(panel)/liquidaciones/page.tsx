@@ -4,16 +4,28 @@ import { useMemo, useRef, useState } from "react";
 import { PageHeader } from "@/components/AppShell";
 import { Card, CardHeader, Badge, Button } from "@/components/ui";
 import { Reveal } from "@/components/motion";
-import { liquidar, compararLiquidacion, type ModoLiquidacion } from "@/lib/liquidacion";
+import { liquidar, compararLiquidacion, sancionMoratoriaArt65, type ModoLiquidacion } from "@/lib/liquidacion";
 import { calcularRecargo, CONCEPTOS_RECARGO, type TipoHora } from "@/lib/recargos";
-import { useContratosConfirmados, useParametros, useEmpresaActiva, logAudit } from "@/lib/store";
-import { CausaTerminacion } from "@/lib/types";
+import {
+  useContratosConfirmados,
+  useParametros,
+  useEmpresaActiva,
+  logAudit,
+  useLiquidacionesRegistradas,
+  addLiquidacionRegistrada,
+  marcarLiquidacionPagada,
+  removeLiquidacionRegistrada,
+} from "@/lib/store";
+import { CausaTerminacion, LiquidacionResultado } from "@/lib/types";
 import { cop, fmtDate } from "@/lib/utils";
 import { Calculator, TickCircle, CloseCircle, Warning2, InfoCircle, Clock } from "iconsax-react";
 
 const CAUSAS: { value: CausaTerminacion; label: string }[] = [
   { value: "sin_justa_causa", label: "Despido sin justa causa" },
   { value: "justa_causa", label: "Despido con justa causa" },
+  { value: "renuncia", label: "Renuncia del trabajador" },
+  { value: "vencimiento_plazo", label: "Vencimiento del plazo (fijo / obra)" },
+  { value: "mutuo_acuerdo", label: "Mutuo acuerdo" },
 ];
 
 export default function LiquidacionesPage() {
@@ -80,6 +92,26 @@ export default function LiquidacionesPage() {
 
   const comparacion =
     pagado.trim() !== "" ? compararLiquidacion(liq.total, Number(pagado.replace(/\D/g, ""))) : null;
+
+  // Registro de liquidaciones para seguimiento de la sanción moratoria (CST art. 65).
+  const registradas = useLiquidacionesRegistradas();
+  function registrar() {
+    addLiquidacionRegistrada({
+      id: `${contrato.id}-${hasta}`,
+      contratoId: contrato.id,
+      empleado: contrato.empleado,
+      fechaRetiro: hasta,
+      total: liq.total,
+      salarioMensual: contrato.salarioMensual,
+      causaLabel: CAUSAS.find((x) => x.value === causa)?.label ?? "",
+      ts: new Date().toISOString(),
+      estado: "pendiente",
+    });
+    logAudit(
+      "Liquidación registrada (seguimiento de mora)",
+      `${contrato.empleado} (${contrato.id}) · retiro ${hasta} · ${cop(liq.total)}`
+    );
+  }
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -345,7 +377,10 @@ export default function LiquidacionesPage() {
           )}
 
           <div className="mt-3 flex flex-col items-end gap-1.5">
-            <div className="flex gap-2">
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button variant="secondary" onClick={registrar}>
+                Registrar liquidación
+              </Button>
               <Button
                 variant="secondary"
                 onClick={() => {
@@ -353,10 +388,10 @@ export default function LiquidacionesPage() {
                     "Liquidación exportada",
                     `${contrato.empleado} (${contrato.id}) · total ${cop(liq.total)}`
                   );
-                  window.print();
+                  imprimirLiquidacion(liq, CAUSAS.find((x) => x.value === causa)?.label ?? "", params.anio);
                 }}
               >
-                Exportar PDF
+                Descargar PDF
               </Button>
               <Button
                 variant="primary"
@@ -379,6 +414,75 @@ export default function LiquidacionesPage() {
           </div>
         </div>
       </div>
+
+      {registradas.length > 0 && (
+        <Card className="mt-4 overflow-x-auto">
+          <CardHeader
+            overline="Seguimiento de pago"
+            title="Liquidaciones registradas — sanción por mora (CST art. 65)"
+            subtitle="Mientras no se marque pagada, se acumula 1 día de salario por cada día de mora desde el retiro (tope 24 meses; luego intereses). Estimación sujeta a análisis de buena fe."
+            right={<Clock size={18} color="var(--red)" />}
+          />
+          <div className="min-w-[680px]">
+            <div className="grid grid-cols-12 gap-2 border-b border-border bg-surface-2 px-5 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-ink-3">
+              <div className="col-span-3">Empleado</div>
+              <div className="col-span-2">Retiro</div>
+              <div className="col-span-2 text-right">Total liq.</div>
+              <div className="col-span-2 text-right">Sanción mora</div>
+              <div className="col-span-3 text-right">Estado / acción</div>
+            </div>
+            <div className="divide-y divide-border">
+              {registradas.map((r) => {
+                const hastaCalc = r.estado === "pagada" ? r.fechaPago ?? HOY : HOY;
+                const s = sancionMoratoriaArt65(r.salarioMensual, r.fechaRetiro, hastaCalc);
+                return (
+                  <div key={r.id} className="grid grid-cols-12 items-center gap-2 px-5 py-2.5 text-[12.5px]">
+                    <div className="col-span-3 min-w-0">
+                      <div className="truncate font-medium text-ink">{r.empleado}</div>
+                      <div className="truncate text-[10.5px] text-ink-3">{r.causaLabel}</div>
+                    </div>
+                    <div className="col-span-2 text-ink-2">{fmtDate(r.fechaRetiro)}</div>
+                    <div className="col-span-2 text-right font-num text-ink-2">{cop(r.total)}</div>
+                    <div className="col-span-2 text-right">
+                      <span
+                        className="font-num"
+                        style={{ color: r.estado === "pendiente" && s.valor > 0 ? "var(--red)" : "var(--ink-3)" }}
+                      >
+                        {cop(s.valor)}
+                      </span>
+                      <div className="text-[10px] text-ink-3">
+                        {s.diasMora} días{s.topeAlcanzado ? " · tope 24m + interés" : ""}
+                      </div>
+                    </div>
+                    <div className="col-span-3 flex items-center justify-end gap-2">
+                      {r.estado === "pagada" ? (
+                        <Badge tone="success">Pagada{r.fechaPago ? ` · ${fmtDate(r.fechaPago)}` : ""}</Badge>
+                      ) : (
+                        <Button
+                          variant="secondary"
+                          onClick={() => {
+                            marcarLiquidacionPagada(r.id, HOY);
+                            logAudit("Liquidación marcada como pagada", `${r.empleado} (${r.contratoId})`);
+                          }}
+                        >
+                          Marcar pagada
+                        </Button>
+                      )}
+                      <button
+                        onClick={() => removeLiquidacionRegistrada(r.id)}
+                        className="text-ink-3 hover:text-red"
+                        aria-label="Quitar"
+                      >
+                        <CloseCircle size={14} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </Card>
+      )}
 
       <style jsx global>{`
         .input {
@@ -441,6 +545,45 @@ const MESES_ABBR = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep
 function mesLabel(m: string): string {
   const [y, mm] = m.split("-");
   return `${MESES_ABBR[Number(mm) - 1] ?? mm} ${y}`;
+}
+
+// Abre SOLO la liquidación en una ventana limpia, lista para imprimir / guardar como PDF
+// (antes window.print() imprimía toda la app: sidebar, header, buscador).
+function imprimirLiquidacion(liq: LiquidacionResultado, causaLabel: string, anio: number) {
+  const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const filas = liq.lineas
+    .map(
+      (l) =>
+        `<tr><td><b>${esc(l.concepto)}</b><div class="sub">${esc(l.base)} · ${esc(l.formula)} · ${esc(l.norma)}</div></td><td class="n">${cop(l.valor)}</td></tr>`
+    )
+    .join("");
+  const notas = liq.notas.map((n) => `<li>${esc(n)}</li>`).join("");
+  const w = window.open("", "_blank", "width=820,height=940");
+  if (!w) return;
+  w.document.write(
+    `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Liquidación — ${esc(liq.empleado)}</title>
+<style>
+  body{font-family:Georgia,'Times New Roman',serif;max-width:720px;margin:40px auto;padding:0 28px;color:#1a1a1a;font-size:13px;line-height:1.5}
+  h1{font-size:18px;margin:0 0 2px}
+  .meta{color:#555;font-size:12px;margin-bottom:16px}
+  table{width:100%;border-collapse:collapse}
+  td{padding:8px 0;border-bottom:1px solid #e5e5e5;vertical-align:top}
+  td.n{text-align:right;white-space:nowrap}
+  .sub{color:#666;font-size:11px;margin-top:2px}
+  tr.total td{font-size:16px;font-weight:bold;border-top:2px solid #1a1a1a;border-bottom:none}
+  ul{color:#444;font-size:11px;margin-top:14px;padding-left:16px}
+  .pie{margin-top:24px;color:#777;font-size:10.5px;border-top:1px solid #ccc;padding-top:8px}
+</style></head><body>
+  <h1>Liquidación de prestaciones</h1>
+  <div class="meta">${esc(liq.empleado)} · ${esc(causaLabel)} · ${liq.desde} → ${liq.hasta} · ${liq.diasLaborados} días · Parámetros ${anio}</div>
+  <table>${filas}<tr class="total"><td>Total liquidación</td><td class="n">${cop(liq.total)}</td></tr></table>
+  ${notas ? `<ul>${notas}</ul>` : ""}
+  <div class="pie">Documento asistido por Centinela. Cálculo determinista; requiere validación y firma del abogado/contador responsable.</div>
+</body></html>`
+  );
+  w.document.close();
+  w.focus();
+  w.print();
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {

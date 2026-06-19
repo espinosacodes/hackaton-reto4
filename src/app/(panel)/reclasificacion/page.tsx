@@ -7,7 +7,7 @@ import { Reveal } from "@/components/motion";
 import { evaluarReclasificacion, SENALES } from "@/lib/reclasificacion";
 import { useContratosConfirmados, useEmpresaActiva, useParametros, logAudit } from "@/lib/store";
 import { SubordinacionSenales } from "@/lib/types";
-import { cop, copShort } from "@/lib/utils";
+import { cop, copShort, fmtDate } from "@/lib/utils";
 import { Cpu, Flash, Judge, Danger, ArrowRight2, Warning2 } from "iconsax-react";
 
 const nivelTone = { alto: "red", medio: "warning", bajo: "success" } as const;
@@ -41,6 +41,7 @@ export default function ReclasificacionPage() {
   const [iaLoading, setIaLoading] = useState(false);
   const [iaMsg, setIaMsg] = useState<string | null>(null);
   const [verContrato, setVerContrato] = useState(false);
+  const [verContratoLaboral, setVerContratoLaboral] = useState(false);
 
   const evals = useMemo(
     () =>
@@ -66,6 +67,9 @@ export default function ReclasificacionPage() {
   function reset(cid: string) {
     const base = candidatos.find((c) => c.id === cid)?.subordinacion ?? {};
     setSenalesPorId((prev) => ({ ...prev, [cid]: { ...base } }));
+  }
+  function limpiar(cid: string) {
+    setSenalesPorId((prev) => ({ ...prev, [cid]: {} }));
   }
 
   async function autodetectar() {
@@ -337,9 +341,33 @@ export default function ReclasificacionPage() {
 
                   <p className="mt-3 text-[12.5px] leading-relaxed text-ink-2">{sel.r.conclusion}</p>
 
-                  <Button variant="secondary" className="mt-3 w-full" onClick={() => reset(sel.c.id)}>
-                    Restablecer señales del contrato
-                  </Button>
+                  <div className="mt-3 space-y-2">
+                    <Button
+                      variant="primary"
+                      className="w-full"
+                      onClick={() => {
+                        setVerContratoLaboral(true);
+                        logAudit("Contrato laboral generado (reclasificación)", `${sel.c.empleado} (${sel.c.id})`);
+                        setTimeout(
+                          () =>
+                            document
+                              .getElementById("contrato-laboral")
+                              ?.scrollIntoView({ behavior: "smooth", block: "start" }),
+                          60
+                        );
+                      }}
+                    >
+                      Generar contrato laboral (formalizar)
+                    </Button>
+                    <div className="flex gap-2">
+                      <Button variant="secondary" className="flex-1" onClick={() => limpiar(sel.c.id)}>
+                        Limpiar señales
+                      </Button>
+                      <Button variant="secondary" className="flex-1" onClick={() => reset(sel.c.id)}>
+                        Restaurar detectadas
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               </Card>
             </Reveal>
@@ -372,6 +400,15 @@ export default function ReclasificacionPage() {
               <span className="font-num text-[13px] font-medium text-ink">
                 {cop(sel.r.exposicion.montoMaximo)}
               </span>
+            </div>
+            <div className="flex items-baseline justify-between gap-3 px-5 py-3">
+              <div className="min-w-0">
+                <span className="text-[12.5px] text-ink">Sanción moratoria potencial (aparte)</span>
+                <div className="text-[10.5px] leading-snug text-ink-3">
+                  No automática; sujeta a buena fe (CST art. 65). No se incluye en la exposición esperada.
+                </div>
+              </div>
+              <span className="font-num text-[12.5px] text-ink-2">{cop(sel.r.exposicion.sancionPotencial)}</span>
             </div>
           </div>
         </Card>
@@ -474,6 +511,41 @@ export default function ReclasificacionPage() {
         </Card>
       )}
 
+      {verContratoLaboral && (
+        <Card id="contrato-laboral" className="mt-3">
+          <CardHeader
+            overline="Formalización"
+            title="Contrato laboral (borrador)"
+            subtitle="Convierte la prestación de servicios en un contrato laboral a término indefinido para formalizar la relación y mitigar la contingencia."
+            right={<Judge size={18} color="var(--red)" />}
+          />
+          <div className="px-5 py-4">
+            <div className="max-h-96 overflow-y-auto whitespace-pre-wrap hairline bg-surface-2 px-4 py-3 text-[11.5px] leading-relaxed text-ink-2">
+              {generarContratoLaboral(sel.c, empresa?.nombre, empresa?.nit, hoy)}
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Button
+                variant="secondary"
+                onClick={() =>
+                  imprimirTexto(
+                    `Contrato laboral - ${sel.c.empleado}`,
+                    generarContratoLaboral(sel.c, empresa?.nombre, empresa?.nit, hoy)
+                  )
+                }
+              >
+                Descargar PDF
+              </Button>
+              <Button variant="ghost" onClick={() => setVerContratoLaboral(false)}>
+                Cerrar
+              </Button>
+              <span className="text-[11px] text-ink-3">
+                Borrador asistido; requiere revisión y firma del abogado responsable.
+              </span>
+            </div>
+          </div>
+        </Card>
+      )}
+
       <div className="mt-3 hairline flex items-start gap-2 bg-[var(--info-tint)] px-4 py-3">
         <Flash size={15} color="var(--info)" className="mt-0.5 shrink-0" />
         <p className="text-[11.5px] leading-snug text-ink-2">
@@ -518,6 +590,59 @@ function resaltarFragmento(texto: string, frag: string, activo: boolean) {
       {texto.slice(i + frag.length)}
     </>
   );
+}
+
+// Genera el borrador del contrato laboral que formaliza la relación (reemplaza la
+// prestación de servicios) cuando se reconoce el contrato realidad.
+function generarContratoLaboral(
+  c: { empleado: string; documento: string; cargo: string; area: string; salarioMensual: number },
+  empresaNombre: string | undefined,
+  empresaNit: string | undefined,
+  hoy: string
+): string {
+  const emp = empresaNombre ?? "[RAZÓN SOCIAL DE LA EMPRESA]";
+  const nit = empresaNit ?? "[NIT]";
+  return [
+    "CONTRATO INDIVIDUAL DE TRABAJO A TÉRMINO INDEFINIDO",
+    "",
+    `Entre ${emp}, identificada con NIT ${nit}, en adelante EL EMPLEADOR, y ${c.empleado}, identificado(a) con C.C. ${c.documento}, en adelante EL TRABAJADOR, se celebra el presente contrato individual de trabajo, que FORMALIZA y RECONOCE la relación laboral existente —en reemplazo del contrato de prestación de servicios— conforme a la primacía de la realidad (CST art. 23; CP art. 53):`,
+    "",
+    `PRIMERA. Cargo y funciones. EL TRABAJADOR desempeñará el cargo de ${c.cargo}${c.area ? ` (área de ${c.area})` : ""}, bajo la continuada subordinación y dependencia de EL EMPLEADOR.`,
+    "",
+    "SEGUNDA. Jornada. La jornada de trabajo se sujeta al máximo legal de 42 horas semanales (Ley 2101/2021).",
+    "",
+    `TERCERA. Salario. EL EMPLEADOR pagará un salario mensual de ${cop(c.salarioMensual)}, por periodos vencidos.`,
+    "",
+    "CUARTA. Prestaciones y seguridad social. EL EMPLEADOR reconocerá y pagará las prestaciones sociales de ley (cesantías e intereses, prima de servicios y vacaciones) y afiliará y cotizará al Sistema de Seguridad Social Integral —salud, pensión y riesgos laborales— y a parafiscales.",
+    "",
+    `QUINTA. Duración. El presente contrato es a TÉRMINO INDEFINIDO y rige a partir del ${fmtDate(hoy)}.`,
+    "",
+    "SEXTA. Reconocimiento de la relación. Las partes reconocen que la relación se ejecutó con los elementos del contrato de trabajo (art. 23 CST). Este contrato la formaliza hacia el futuro, sin perjuicio de los derechos ya causados, que deberán liquidarse y pagarse conforme a la ley.",
+    "",
+    "SÉPTIMA. Reglamento. EL TRABAJADOR se obliga a cumplir el Reglamento Interno de Trabajo y las instrucciones de EL EMPLEADOR.",
+    "",
+    "Para constancia se firma por las partes.",
+    "",
+    "____________________________          ____________________________",
+    `EL EMPLEADOR — ${emp}                 EL TRABAJADOR — ${c.empleado}`,
+    "",
+    "— Borrador asistido por Centinela. Requiere revisión y firma del abogado responsable. —",
+  ].join("\n");
+}
+
+// Abre un texto en una ventana lista para imprimir / guardar como PDF.
+function imprimirTexto(titulo: string, texto: string) {
+  const w = window.open("", "_blank", "width=820,height=920");
+  if (!w) return;
+  const safe = texto.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  w.document.write(
+    `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${titulo}</title>` +
+      `<style>body{font-family:Georgia,'Times New Roman',serif;max-width:680px;margin:48px auto;padding:0 28px;color:#1a1a1a;font-size:13px;line-height:1.7;white-space:pre-wrap}</style>` +
+      `</head><body>${safe}</body></html>`
+  );
+  w.document.close();
+  w.focus();
+  w.print();
 }
 
 function SenalRow({

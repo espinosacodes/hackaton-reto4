@@ -148,17 +148,13 @@ export function calcularExposicion(
       detalle: `5% sobre IBC × ${mesesExpuestos} meses (puede no aplicar por exoneración Ley 1819/2016 si <10 SMMLV)`,
       norma: "Ley 89/1988; Ley 119/1994",
     },
-    {
-      concepto: "Sanción moratoria (potencial)",
-      valor: sancion,
-      detalle: `1 día de salario por día de mora a la terminación, hasta ${TOPE_MORA_MESES} meses`,
-      norma: "CST art. 65",
-    },
   ];
 
+  // El pasivo retroactivo (rubros) es el monto sólido. La sanción moratoria del art. 65
+  // se reporta APARTE: no es automática (depende de la buena fe) y no se suma al esperado.
   const montoMaximo = rubros.reduce((s, r) => s + r.valor, 0);
   const exposicionEsperada = Math.round((montoMaximo * probabilidad) / 100);
-  return { rubros, montoMaximo, exposicionEsperada, mesesExpuestos };
+  return { rubros, montoMaximo, exposicionEsperada, sancionPotencial: sancion, mesesExpuestos };
 }
 
 function detectarContradicciones(c: Contrato, s: SubordinacionSenales): ContradiccionContrato[] {

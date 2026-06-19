@@ -41,6 +41,8 @@ export interface Contrato {
   // Confianza de la extracción IA (0–1)
   extraccionConfianza?: number;
   fuente?: "ia" | "manual";
+  // Texto del documento cargado (para ver/descargar el contrato real, no el representativo)
+  texto?: string;
 }
 
 // Señales de cómo se OPERA la relación (no juicios jurídicos: hechos verificables).
@@ -156,9 +158,10 @@ export interface RubroExposicion {
 }
 
 export interface ExposicionReclasificacion {
-  rubros: RubroExposicion[];
+  rubros: RubroExposicion[]; // pasivo retroactivo (sin sanción moratoria)
   montoMaximo: number; // exposición total si un juez reclasifica
   exposicionEsperada: number; // probabilidad × monto máximo
+  sancionPotencial: number; // sanción art. 65 estimada — aparte, NO en el esperado
   mesesExpuestos: number; // meses dentro de la prescripción (≤ 36)
 }
 

@@ -181,6 +181,10 @@ export function liquidar(
     notas.push(
       "El vencimiento del plazo pactado es un modo legal de terminación (CST art. 61, lit. c) y no genera indemnización. El preaviso de 30 días (CST art. 46) solo evita la prórroga automática; su omisión prorroga el contrato por un periodo igual."
     );
+  } else if (causa === "mutuo_acuerdo") {
+    notas.push(
+      "Terminación por mutuo acuerdo (CST art. 61, lit. b): no genera indemnización legal. Cualquier bonificación por retiro es la que pacten libremente las partes y debe constar por escrito."
+    );
   }
 
   const total = lineas.reduce((s, l) => s + l.valor, 0);
@@ -248,6 +252,33 @@ function calcularIndemnizacion(
     dias: Math.round(diasIndem),
     valor: round(diasIndem * salarioDiario),
     norma: "CST art. 64 (contrato a término indefinido)",
+  };
+}
+
+// Días calendario entre dos fechas yyyy-mm-dd (no negativos).
+function diasCalendario(desde: string, hasta: string): number {
+  const a = new Date(`${desde}T00:00:00`).getTime();
+  const b = new Date(`${hasta}T00:00:00`).getTime();
+  return Math.max(0, Math.round((b - a) / 86_400_000));
+}
+
+const TOPE_SANCION_DIAS = 720; // 24 meses (CST art. 65)
+
+/**
+ * Sanción moratoria del art. 65 CST: si al terminar el contrato el empleador no paga
+ * lo adeudado, debe 1 día de salario por cada día de mora, hasta 24 meses; pasados los
+ * 24 meses corre como intereses moratorios. NO es automática: la CSJ exige analizar la
+ * buena fe del empleador. Aquí se estima el primer tramo (días × salario diario).
+ */
+export function sancionMoratoriaArt65(salarioMensual: number, fechaRetiro: string, hasta: string) {
+  const diasMora = diasCalendario(fechaRetiro, hasta);
+  const diasComputados = Math.min(diasMora, TOPE_SANCION_DIAS);
+  const salarioDiario = salarioMensual / 30;
+  return {
+    diasMora,
+    diasComputados,
+    valor: Math.round(salarioDiario * diasComputados),
+    topeAlcanzado: diasMora > TOPE_SANCION_DIAS,
   };
 }
 

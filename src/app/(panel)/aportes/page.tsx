@@ -247,8 +247,8 @@ function ModoMotor({
   return (
     <div className="grid grid-cols-1 gap-3 lg:grid-cols-5">
       <div className="lg:col-span-3">
-        <Card className="overflow-hidden">
-          <div className="grid grid-cols-12 gap-2 border-b border-border bg-surface-2 px-5 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-ink-3">
+        <Card className="overflow-x-auto">
+          <div className="grid min-w-[520px] grid-cols-12 gap-2 border-b border-border bg-surface-2 px-5 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-ink-3">
             <div className="col-span-4">Trabajador</div>
             <div className="col-span-2">ARL</div>
             <div className="col-span-2 text-right">IBC</div>
@@ -259,7 +259,7 @@ function ModoMotor({
             {aportes.map((a, i) => (
               <div
                 key={a.contratoId}
-                className="grid grid-cols-12 items-center gap-2 px-5 py-2 text-[12.5px]"
+                className="grid min-w-[520px] grid-cols-12 items-center gap-2 px-5 py-2 text-[12.5px]"
                 style={{ background: i === sel ? "var(--surface-2)" : undefined }}
               >
                 <button onClick={() => setSel(i)} className="col-span-4 truncate text-left font-medium text-ink hover:text-red">
@@ -283,7 +283,7 @@ function ModoMotor({
               </div>
             ))}
           </div>
-          <div className="grid grid-cols-12 gap-2 border-t-2 border-border-strong bg-surface-2 px-5 py-3 text-[12.5px]">
+          <div className="grid min-w-[520px] grid-cols-12 gap-2 border-t-2 border-border-strong bg-surface-2 px-5 py-3 text-[12.5px]">
             <div className="col-span-8 font-head text-ink">Total nómina laboral / mes</div>
             <div className="col-span-2 text-right font-num text-ink">{cop(totSS)}</div>
             <div className="col-span-2 text-right font-num text-ink-2">{cop(totProv)}</div>
@@ -364,8 +364,8 @@ function ModoPlanilla({ aportes }: { aportes: ReturnType<typeof calcularAportes>
         </div>
       </Card>
 
-      <Card className="overflow-hidden">
-        <div className="grid grid-cols-12 gap-2 border-b border-border bg-surface-2 px-5 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-ink-3">
+      <Card className="overflow-x-auto">
+        <div className="grid min-w-[560px] grid-cols-12 gap-2 border-b border-border bg-surface-2 px-5 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-ink-3">
           <div className="col-span-4">Trabajador</div>
           <div className="col-span-3 text-right">Debido (seg. social)</div>
           <div className="col-span-3 text-right">Pagado</div>
@@ -376,7 +376,7 @@ function ModoPlanilla({ aportes }: { aportes: ReturnType<typeof calcularAportes>
             const pagado = Number((pagados[a.contratoId] ?? "").replace(/\D/g, ""));
             const cmp = compararAporte(a.totalSeguridadSocial, pagado);
             return (
-              <div key={a.contratoId} className="grid grid-cols-12 items-center gap-2 px-5 py-2.5 text-[12.5px]">
+              <div key={a.contratoId} className="grid min-w-[560px] grid-cols-12 items-center gap-2 px-5 py-2.5 text-[12.5px]">
                 <div className="col-span-4 font-medium text-ink">{a.empleado}</div>
                 <div className="col-span-3 text-right font-num text-ink-2">{cop(a.totalSeguridadSocial)}</div>
                 <div className="col-span-3 text-right">

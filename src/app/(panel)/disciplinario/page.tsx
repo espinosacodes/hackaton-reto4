@@ -29,6 +29,18 @@ import {
   DocumentDownload,
 } from "iconsax-react";
 
+// Aviso jurídico por tipo de fuero / estabilidad reforzada (la causa #1 de nulidad del despido).
+const FUERO_AVISO: Record<string, string> = {
+  maternidad:
+    "El despido de trabajadora en embarazo o lactancia requiere autorización previa del inspector de trabajo (CST arts. 239-241); sin ella, el despido es ineficaz y procede el reintegro.",
+  salud:
+    "El trabajador con afectación de salud o discapacidad goza de estabilidad reforzada: el despido exige justa causa y autorización del inspector de trabajo (Ley 361/1997 art. 26; Corte Const. SU-049/2017).",
+  sindical:
+    "El despido de un trabajador aforado sindical requiere permiso judicial previo (levantamiento del fuero, CST arts. 405 y 408).",
+  prepensionado:
+    "El trabajador próximo a cumplir requisitos de pensión goza de estabilidad reforzada; el retiro sin justa causa puede declararse ineficaz por la jurisdicción.",
+};
+
 export default function DisciplinarioPage() {
   const empresa = useEmpresaActiva();
   const CONTRATOS = useMemo(() => empresa?.contratos ?? [], [empresa]);
@@ -59,6 +71,7 @@ export default function DisciplinarioPage() {
     oportunidadPruebas: "",
     tipoNotificacion: "sancion" as "sancion" | "despido",
     decision: "",
+    fuero: "" as "" | "maternidad" | "salud" | "sindical" | "prepensionado",
   });
   const causal = JUSTAS_CAUSAS_EMPLEADOR.find((c) => c.id === form.causalId);
   const rit = docsPerfil.find((d) => d.tipo.includes("RIT")) ?? docsPerfil[0];
@@ -80,6 +93,10 @@ export default function DisciplinarioPage() {
   const [cargandoDoc, setCargandoDoc] = useState(false);
   const [errorDoc, setErrorDoc] = useState<string | null>(null);
 
+  // Fuero / estabilidad reforzada: soporte (autorización del inspector, solicitud, etc.).
+  const fueroInputRef = useRef<HTMLInputElement>(null);
+  const [fueroSoporte, setFueroSoporte] = useState("");
+
   const caso: CasoDisciplinario = {
     empresa: EMPRESA,
     empleado: trab.empleado,
@@ -99,6 +116,9 @@ export default function DisciplinarioPage() {
     oportunidadPruebas: form.oportunidadPruebas || undefined,
     tipoNotificacion: form.tipoNotificacion,
     decision: form.decision || undefined,
+    documento: trab.documento,
+    nit: empresa?.nit,
+    fechaExpedicion: empresa?.hoy,
   };
 
   async function pedirAsesoria() {
@@ -170,6 +190,11 @@ export default function DisciplinarioPage() {
   function generar(tipo: string, label: string) {
     setDocumento({ texto: generarDocumento(tipo, caso), titulo: label });
     logAudit("Documento disciplinario generado", `${label} — ${trab.empleado}`);
+  }
+
+  function cargarFueroSoporte(file: File) {
+    setFueroSoporte(file.name);
+    logAudit("Soporte de fuero adjuntado", `${file.name} — ${trab.empleado} · ${form.fuero}`);
   }
 
   // Carga el documento anotado durante la audiencia y vuelca su texto en el acta.
@@ -337,6 +362,54 @@ export default function DisciplinarioPage() {
           <Campo label="Norma interna infringida">
             <input className="dx" value={form.normaInterna} onChange={(e) => setForm({ ...form, normaInterna: e.target.value })} />
           </Campo>
+          <div className="md:col-span-2">
+            <label className="block">
+              <span className="overline mb-1 block">¿El trabajador tiene fuero o estabilidad reforzada?</span>
+              <select
+                className="dx"
+                value={form.fuero}
+                onChange={(e) => setForm({ ...form, fuero: e.target.value as typeof form.fuero })}
+              >
+                <option value="">No / no aplica</option>
+                <option value="maternidad">Maternidad o lactancia</option>
+                <option value="salud">Salud o discapacidad</option>
+                <option value="sindical">Fuero sindical</option>
+                <option value="prepensionado">Prepensionado</option>
+              </select>
+            </label>
+            {form.fuero && (
+              <div className="hairline mt-2 flex items-start gap-2 bg-[var(--red-tint)] px-3 py-2.5">
+                <Warning2 size={16} color="var(--red)" variant="Bold" className="mt-0.5 shrink-0" />
+                <div className="text-[12px] leading-snug text-ink-2">
+                  <p>
+                    <span className="font-medium text-red-dark">No proceda al despido sin autorización.</span>{" "}
+                    {FUERO_AVISO[form.fuero]}
+                  </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <input
+                      ref={fueroInputRef}
+                      type="file"
+                      accept={ACCEPTED_FILE_TYPES}
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) cargarFueroSoporte(f);
+                        e.target.value = "";
+                      }}
+                    />
+                    <Button variant="secondary" onClick={() => fueroInputRef.current?.click()}>
+                      <DocumentUpload size={15} /> Adjuntar autorización / soporte
+                    </Button>
+                    {fueroSoporte && (
+                      <span className="inline-flex items-center text-[11.5px] text-ink">
+                        <TickCircle size={13} color="var(--success)" className="mr-1" /> {fueroSoporte}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </Card>
 

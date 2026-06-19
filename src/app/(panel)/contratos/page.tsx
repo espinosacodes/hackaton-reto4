@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/AppShell";
 import { Card, CardHeader, Badge, Button, Progress } from "@/components/ui";
 import { Reveal } from "@/components/motion";
 import { DocumentSource } from "@/components/DocumentSource";
-import { addContratoConfirmado, logAudit, useBusqueda, setBusqueda, useEmpresaActiva } from "@/lib/store";
+import { addContratoConfirmado, logAudit, useBusqueda, setBusqueda, useEmpresaActiva, useContratosConfirmados } from "@/lib/store";
 import { Contrato } from "@/lib/types";
 import { cop, fmtDate } from "@/lib/utils";
 import { DocumentUpload, Flash, TickCircle, People, Cpu, Warning2, ArrowDown2 } from "iconsax-react";
@@ -24,15 +24,6 @@ const tipoTone: Record<string, "neutral" | "warning" | "red"> = {
   plataforma: "red",
 };
 
-const TITULOS: Record<string, string> = {
-  indefinido: "CONTRATO INDIVIDUAL DE TRABAJO A TÉRMINO INDEFINIDO",
-  fijo: "CONTRATO INDIVIDUAL DE TRABAJO A TÉRMINO FIJO",
-  obra_labor: "CONTRATO DE TRABAJO POR DURACIÓN DE LA OBRA O LABOR",
-  aprendizaje: "CONTRATO DE APRENDIZAJE",
-  prestacion_servicios: "CONTRATO DE PRESTACIÓN DE SERVICIOS",
-  plataforma: "CONTRATO DE VINCULACIÓN — PLATAFORMA DIGITAL",
-};
-
 const EJEMPLO = `CONTRATO INDIVIDUAL DE TRABAJO A TÉRMINO FIJO
 
 Entre EMPRESA DEMO S.A.S. y la señora MARÍA CAMILA RESTREPO, identificada con C.C. 1.144.092.331, se celebra el presente contrato para el cargo de ANALISTA DE CARTERA.
@@ -43,7 +34,10 @@ El empleador se obliga a pagar seguridad social, prima de servicios, cesantías 
 
 export default function ContratosPage() {
   const empresa = useEmpresaActiva();
+  const confirmados = useContratosConfirmados();
   const CONTRATOS = empresa?.contratos ?? [];
+  // Nómina = contratos cargados/validados por IA + la nómina base de la empresa.
+  const todos = [...confirmados, ...CONTRATOS];
   const [texto, setTexto] = useState("");
   const [cargando, setCargando] = useState(false);
   const [extraccion, setExtraccion] = useState<Record<string, unknown> | null>(null);
@@ -67,10 +61,10 @@ export default function ContratosPage() {
   // Búsqueda global del encabezado → filtra la nómina mostrada.
   const q = useBusqueda().trim().toLowerCase();
   const nomina = q
-    ? CONTRATOS.filter((c) =>
+    ? todos.filter((c) =>
         `${c.empleado} ${c.cargo} ${c.area} ${c.id}`.toLowerCase().includes(q)
       )
-    : CONTRATOS;
+    : todos;
 
   function setCampo(k: string, v: string | number) {
     setDatos((prev) => ({ ...(prev ?? {}), [k]: v }));
@@ -96,6 +90,7 @@ export default function ContratosPage() {
       estado: "activo",
       extraccionConfianza: Number(d.confianza ?? 0),
       fuente: "ia",
+      texto: texto.trim() || undefined,
     };
     addContratoConfirmado(nuevo);
     logAudit(
@@ -144,7 +139,7 @@ export default function ContratosPage() {
 
       {/* Extractor */}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-        <Card>
+        <Card id="cargar-contrato">
           <CardHeader
             overline="Cargar contrato"
             title="Suba el contrato (PDF, DOCX o TXT)"
@@ -324,7 +319,7 @@ export default function ContratosPage() {
         <h2 className="font-head text-[16px] text-ink">Nómina analizada</h2>
         <span className="text-[12px] text-ink-3">
           · {nomina.length}
-          {q ? ` de ${CONTRATOS.length}` : ""} vínculos
+          {q ? ` de ${todos.length}` : ""} vínculos
         </span>
         {q && (
           <button
@@ -412,76 +407,10 @@ function mockClient(text: string): Record<string, unknown> {
   };
 }
 
-// Genera un documento de contrato legible a partir de los datos estructurados.
-// (Representativo: el texto original del PDF no se persiste en la demo.)
-function generarTextoContrato(c: Contrato): string {
-  const esCivil = c.tipo === "prestacion_servicios" || c.tipo === "plataforma";
-  const rol = esCivil ? "EL CONTRATISTA" : "EL TRABAJADOR";
-  const parte = esCivil ? "EL CONTRATANTE" : "EL EMPLEADOR";
-  const L: string[] = [];
-  L.push(TITULOS[c.tipo] ?? "CONTRATO");
-  L.push("");
-  L.push(
-    `Entre la empresa, en adelante ${parte}, y ${c.empleado}, identificado(a) con documento ${c.documento}, en adelante ${rol}, se celebra el presente contrato, regido por las siguientes cláusulas:`
-  );
-  L.push("");
-  L.push(
-    `PRIMERA. ${esCivil ? "Objeto" : "Cargo y funciones"}. ${rol} ${
-      esCivil
-        ? `prestará sus servicios de ${c.cargo} de forma autónoma e independiente, sin subordinación ni dependencia respecto de ${parte}.`
-        : `desempeñará el cargo de ${c.cargo} en el área de ${c.area}, bajo la subordinación y dependencia continuada de ${parte}.`
-    }`
-  );
-  L.push("");
-  L.push(
-    `SEGUNDA. ${esCivil ? "Autonomía" : "Jornada"}. ${
-      esCivil
-        ? `${rol} no estará sujeto a horario ni a jornada de trabajo y organizará su tiempo con plena independencia.`
-        : `La jornada será de ${c.horasSemana} horas semanales (jornada ${c.jornada}).`
-    }`
-  );
-  L.push("");
-  L.push(
-    `TERCERA. ${esCivil ? "Honorarios" : "Remuneración"}. ${
-      esCivil
-        ? `${parte} pagará honorarios de ${cop(c.salarioMensual)} mensuales contra presentación de factura o cuenta de cobro.`
-        : `${parte} pagará un salario mensual de ${cop(c.salarioMensual)}${
-            c.salarioIntegral ? ", en la modalidad de salario integral (CST art. 132)" : ""
-          }${c.auxilioTransporte ? ", más el auxilio de transporte de ley" : ""}.`
-    }`
-  );
-  L.push("");
-  if (esCivil) {
-    L.push(`CUARTA. No exclusividad. ${rol} podrá prestar sus servicios a terceros, sin relación de exclusividad con ${parte}.`);
-    L.push("");
-    L.push(`QUINTA. Medios propios. ${rol} ejecutará la labor con sus propios medios, herramientas y equipos, asumiendo los riesgos de su actividad.`);
-  } else {
-    L.push(`CUARTA. Prestaciones. ${parte} reconocerá las prestaciones sociales de ley: cesantías e intereses, prima de servicios, vacaciones y seguridad social integral.`);
-    L.push("");
-    L.push(`QUINTA. Obligaciones. ${rol} cumplirá el Reglamento Interno de Trabajo, las instrucciones de ${parte} y las normas de seguridad y salud en el trabajo.`);
-  }
-  L.push("");
-  L.push(
-    `SEXTA. Vigencia. ${
-      c.fechaFin
-        ? `El presente contrato regirá del ${fmtDate(c.fechaInicio)} al ${fmtDate(c.fechaFin)}.`
-        : `El presente contrato regirá a partir del ${fmtDate(c.fechaInicio)} por término indefinido.`
-    }`
-  );
-  L.push("");
-  L.push("Para constancia se firma por las partes.");
-  L.push("");
-  L.push("____________________________");
-  L.push(`${parte}`);
-  L.push("");
-  L.push("____________________________");
-  L.push(`${rol}`);
-  return L.join("\n");
-}
-
-// Abre el documento en una ventana lista para imprimir / guardar como PDF.
+// Abre el documento del contrato (texto extraído) listo para imprimir / guardar como PDF.
 function imprimirContrato(c: Contrato) {
-  const texto = generarTextoContrato(c);
+  const texto = c.texto?.trim();
+  if (!texto) return;
   const w = window.open("", "_blank", "width=820,height=920");
   if (!w) return;
   const safe = texto.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -515,7 +444,10 @@ function Row({ c, abierto, onToggle }: { c: Contrato; abierto: boolean; onToggle
             className="shrink-0"
           />
           <div className="min-w-0">
-            <div className="font-medium text-ink">{c.empleado}</div>
+            <div className="flex items-center gap-2">
+              <span className="truncate font-medium text-ink">{c.empleado}</span>
+              {c.id.startsWith("C-IA") && <Badge tone="success">Cargado</Badge>}
+            </div>
             <div className="text-[11px] text-ink-3">{c.cargo} · {c.area}</div>
           </div>
         </div>
@@ -564,22 +496,43 @@ function Row({ c, abierto, onToggle }: { c: Contrato; abierto: boolean; onToggle
             <Campo k="Fuente" v={c.fuente === "ia" ? "IA" : "Manual"} />
           </dl>
 
-          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">
-            <Button variant="secondary" onClick={() => setVerDoc((v) => !v)}>
-              {verDoc ? "Ocultar documento" : "Ver documento del contrato"}
-            </Button>
-            <Button variant="secondary" onClick={() => imprimirContrato(c)}>
-              Descargar PDF
-            </Button>
-          </div>
-          {verDoc && (
-            <div className="mt-2 max-h-80 overflow-y-auto hairline bg-surface-2 px-4 py-3">
-              <div className="whitespace-pre-wrap text-[11.5px] leading-relaxed text-ink-2">
-                {generarTextoContrato(c)}
+          {c.texto?.trim() ? (
+            <>
+              <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">
+                <Button variant="secondary" onClick={() => setVerDoc((v) => !v)}>
+                  {verDoc ? "Ocultar documento" : "Ver documento del contrato"}
+                </Button>
+                <Button variant="secondary" onClick={() => imprimirContrato(c)}>
+                  Descargar PDF
+                </Button>
               </div>
-              <p className="mt-2 text-[10px] leading-snug text-ink-3">
-                Documento generado a partir de los datos extraídos (representativo). No reemplaza el contrato firmado original.
-              </p>
+              {verDoc && (
+                <div className="mt-2 max-h-80 overflow-y-auto hairline bg-surface-2 px-4 py-3">
+                  <div className="whitespace-pre-wrap text-[11.5px] leading-relaxed text-ink-2">{c.texto}</div>
+                  <p className="mt-2 text-[10px] leading-snug text-ink-3">Texto extraído del documento cargado.</p>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="mt-3 border-t border-border pt-3">
+              <div className="hairline flex items-start gap-2 bg-[var(--warning-tint)] px-3 py-2.5 text-[12px]">
+                <Warning2 size={15} color="var(--warning)" variant="Bold" className="mt-0.5 shrink-0" />
+                <span className="text-ink-2">
+                  <span className="font-medium text-ink">No se pudo leer el documento</span> de este contrato.
+                  {c.id.startsWith("C-IA")
+                    ? " La extracción no guardó un texto legible; vuelve a subirlo."
+                    : " Este registro no tiene un documento cargado; súbelo para verlo aquí."}
+                </span>
+              </div>
+              <Button
+                variant="secondary"
+                className="mt-2"
+                onClick={() =>
+                  document.getElementById("cargar-contrato")?.scrollIntoView({ behavior: "smooth", block: "start" })
+                }
+              >
+                Reintentar carga
+              </Button>
             </div>
           )}
         </div>

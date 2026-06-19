@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { SearchNormal1, Notification, ShieldTick } from "iconsax-react";
 import { generarAlertas } from "@/lib/alertas";
 import { fmtDate } from "@/lib/utils";
-import { useBusqueda, setBusqueda, useEmpresaActiva } from "@/lib/store";
+import { useBusqueda, setBusqueda, useEmpresaActiva, useContratosConfirmados } from "@/lib/store";
 import { AuthGate, UserMenu } from "./Auth";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -25,7 +25,8 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const busqueda = useBusqueda();
   const empresa = useEmpresaActiva();
-  const alertas = empresa ? generarAlertas(empresa.contratos, empresa.hoy) : [];
+  const confirmados = useContratosConfirmados();
+  const alertas = empresa ? generarAlertas([...confirmados, ...empresa.contratos], empresa.hoy) : [];
   const criticas = alertas.filter((a) => a.severidad === "critica").length;
   const altas = alertas.filter((a) => a.severidad === "alta").length;
   const medias = alertas.filter((a) => a.severidad === "media").length;

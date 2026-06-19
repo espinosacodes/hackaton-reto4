@@ -264,6 +264,9 @@ export interface CasoDisciplinario {
   oportunidadPruebas?: string; // si las pruebas se aportaron oportunamente y su descripción
   decision?: string; // texto de la sanción/archivo
   tipoNotificacion?: "sancion" | "despido"; // qué notifica: sanción o despido con justa causa
+  documento?: string; // cédula del trabajador
+  nit?: string; // NIT de la empresa
+  fechaExpedicion?: string; // fecha de expedición del documento (ISO)
 }
 
 const PIE = "— Documento asistido por Centinela. Requiere revisión y firma del abogado responsable. —";
@@ -276,6 +279,12 @@ function indentar(texto: string): string {
     .split("\n")
     .map((l) => `   ${l}`)
     .join("\n");
+}
+
+// Devuelve el valor si existe, o un placeholder [EN MAYÚSCULAS] para que el abogado
+// lo complete (no se inventa nada en los documentos legales).
+function ph(v: string | undefined, label: string): string {
+  return v && v.trim() ? v : `[${label}]`;
 }
 
 function fundamento(c: CasoDisciplinario): string {
@@ -347,30 +356,50 @@ ${PIE}`;
 }
 
 export function generarCitacion(c: CasoDisciplinario): string {
-  return `CITACIÓN A DILIGENCIA DE DESCARGOS
+  const norma = [c.normaInterna, c.causalTexto].filter(Boolean).join(" — ");
+  return `[CIUDAD], ${ph(c.fechaExpedicion, "FECHA DE EXPEDICIÓN")}
 
+Señor(a),
+${c.empleado}
+C.C. ${ph(c.documento, "NÚMERO DE CÉDULA")} expedida en [LUGAR DE EXPEDICIÓN]
+${c.cargo}
+E. S. M.
+
+CITACIÓN A AUDIENCIA DE DESCARGOS
+ASUNTO: APERTURA DE INVESTIGACIÓN DISCIPLINARIA
+
+Respetado(a) señor(a) ${c.empleado}:
+
+Con el fin de respetar y garantizar los derechos de defensa y debido proceso que le asisten, ${c.empresa}, identificada con NIT ${ph(c.nit, "NIT DE LA EMPRESA")}, se permite citarlo(a) formalmente a rendir descargos dentro de la investigación disciplinaria que se adelanta en su contra, de conformidad con el artículo 115 del Código Sustantivo del Trabajo, modificado por el artículo 7° de la Ley 2466 de 2025, y el artículo 29 de la Constitución Política.
+
+FECHA, HORA Y LUGAR DE LA DILIGENCIA
+Sírvase presentarse el día ${ph(c.fechaDiligencia, "FECHA DE LA AUDIENCIA")}, a las [HORA DE LA AUDIENCIA], en ${ph(c.lugarDiligencia, "LUGAR O ENLACE VIRTUAL DE LA AUDIENCIA")}${c.linkDiligencia ? ` (enlace: ${c.linkDiligencia})` : ""}, con el fin de ser escuchado(a) en diligencia de descargos.
+
+HECHOS
+El día ${c.fechaHechos}: ${c.hechos}
+
+NORMA PRESUNTAMENTE INFRINGIDA
+${norma || "[ARTÍCULO(S) DEL REGLAMENTO INTERNO DE TRABAJO Y/O DEL CÓDIGO SUSTANTIVO DEL TRABAJO PRESUNTAMENTE INFRINGIDOS]"}
+
+RELACIÓN DE PRUEBAS
+[LISTADO DE PRUEBAS DOCUMENTALES, TESTIMONIALES O DE OTRA NATURALEZA QUE SUSTENTAN LA INVESTIGACIÓN]
+
+DERECHOS DEL TRABAJADOR
+En desarrollo de la presente diligencia, usted tiene derecho a:
+- Aportar y controvertir las pruebas que considere pertinentes para su defensa.
+- Estar acompañado(a) de hasta dos (2) compañeros de trabajo.
+- Contar con la asistencia de un abogado, quien deberá acreditar poder antes del inicio de la audiencia.
+- Estar acompañado(a) de uno (1) o dos (2) representantes de la organización sindical a la que se encuentre afiliado(a), si aplica.
+- Guardar silencio respecto de los hechos materia de investigación, sin que ello pueda interpretarse en su contra.
+
+RECURSOS
+En caso de no poder asistir a la audiencia en la fecha y hora señaladas, podrá solicitar su reprogramación dentro de los tres (3) días hábiles siguientes, dirigiéndose a [ÁREA O CORREO DE CONTACTO DE LA EMPRESA].
+
+Atentamente,
+
+[NOMBRE DE QUIEN SUSCRIBE LA CITACIÓN]
+[CARGO (ej. Representante Legal / Apoderado)]
 ${c.empresa}
-Señor(a) ${c.empleado} — ${c.cargo}
-
-1. COMUNICACIÓN DE CARGOS
-   Por medio de la presente se le comunica que se adelanta un proceso disciplinario en su contra.
-
-2. HECHOS QUE SE IMPUTAN
-   El día ${c.fechaHechos}: ${c.hechos}
-
-3. FALTA Y FUNDAMENTO NORMATIVO
-${fundamento(c)}
-4. CITACIÓN A DESCARGOS
-   Se le cita a diligencia de descargos el ${c.fechaDiligencia ?? "[fecha]"} en ${c.lugarDiligencia ?? "[lugar]"}.${
-     c.linkDiligencia ? `\n   Enlace de la audiencia (virtual): ${c.linkDiligencia}` : ""
-   }
-   En ella usted podrá:
-   - Rendir su versión y ser oído (CN art. 29).
-   - Estar acompañado por dos representantes del sindicato o dos compañeros (CST art. 115).
-   - Presentar y controvertir las pruebas.
-
-5. PLAZO
-   Se concede un término razonable para preparar la defensa (CSJ SL1706-2024).
 
 ${PIE}`;
 }
@@ -439,36 +468,47 @@ ${PIE}`;
 
 export function generarNotificacion(c: CasoDisciplinario): string {
   const esDespido = c.tipoNotificacion === "despido";
-  const titulo = esDespido
-    ? "NOTIFICACIÓN DE TERMINACIÓN DEL CONTRATO CON JUSTA CAUSA"
-    : "NOTIFICACIÓN DE SANCIÓN DISCIPLINARIA";
-  const cuerpo = esDespido
-    ? `Por medio de la presente se le NOTIFICA la decisión de DAR POR TERMINADO su contrato de trabajo
-con JUSTA CAUSA, adoptada dentro del proceso disciplinario relacionado con los hechos del ${c.fechaHechos},
-una vez surtidas la citación, la diligencia de descargos y la valoración de pruebas.
+  const asunto = esDespido
+    ? "TERMINACIÓN DEL CONTRATO CON JUSTA CAUSA"
+    : "[LLAMADO DE ATENCIÓN / SUSPENSIÓN DEL CONTRATO, según corresponda]";
+  const norma = [c.normaInterna, c.causalTexto].filter(Boolean).join(" — ");
+  return `[CIUDAD], ${ph(c.fechaExpedicion, "FECHA DE EXPEDICIÓN")}
 
-Causa de la terminación:
-${fundamento(c)}
-Decisión: ${c.decision ?? "[resumen de la decisión de terminación con justa causa]"}`
-    : `Por medio de la presente se le NOTIFICA la SANCIÓN DISCIPLINARIA adoptada dentro del proceso
-relacionado con los hechos del ${c.fechaHechos}, una vez surtidas la citación, la diligencia de
-descargos y la valoración de pruebas.
+Señor(a),
+${c.empleado}
+C.C. ${ph(c.documento, "NÚMERO DE CÉDULA")} expedida en [LUGAR DE EXPEDICIÓN]
+${c.cargo}
+E. S. M.
 
-Fundamento:
-${fundamento(c)}
-Decisión: ${c.decision ?? "[resumen de la sanción impuesta]"}`;
+NOTIFICACIÓN DE DECISIÓN DISCIPLINARIA
+ASUNTO: CIERRE DE INVESTIGACIÓN — ${asunto}
 
-  // Cláusula de recursos: SIEMPRE debe informarse la posibilidad de impugnar (CN art. 29).
-  return `${titulo}
+De conformidad con lo establecido en el Código Sustantivo del Trabajo y en el Reglamento Interno de Trabajo, nos permitimos informarle que, una vez finalizado el proceso de investigación disciplinaria adelantado en su contra, ${c.empresa} ha decidido dar cierre al proceso de la referencia y notificarle la siguiente decisión, previo los siguientes:
 
-${c.empresa}
-Señor(a) ${c.empleado} — ${c.cargo}
+HECHOS
+El día ${c.fechaHechos}: ${c.hechos}
+Fecha de la citación a descargos: ${ph(c.fechaDiligencia, "FECHA DE LA CITACIÓN A DESCARGOS")}.
 
-${cuerpo}
+DESCARGOS RENDIDOS POR EL TRABAJADOR
+${c.preguntasRespuestas ? indentar(c.preguntasRespuestas) : "[SÍNTESIS DE LAS EXPLICACIONES Y PRUEBAS APORTADAS POR EL TRABAJADOR EN LA DILIGENCIA DE DESCARGOS, O CONSTANCIA DE INASISTENCIA SI APLICA]"}
+
+ANTECEDENTES DISCIPLINARIOS
+[RELACIÓN DE SANCIONES O LLAMADOS DE ATENCIÓN PREVIOS DEL TRABAJADOR, SI LOS HAY, O CONSTANCIA DE QUE NO REGISTRA ANTECEDENTES]
+
+CONSIDERACIONES Y CLASIFICACIÓN DE LA FALTA
+Valoradas en conjunto las pruebas obrantes en el expediente, se encuentra acreditado que el(la) trabajador(a) incurrió en una falta de naturaleza [LEVE / GRAVE / GRAVÍSIMA], conforme a la clasificación del Reglamento Interno de Trabajo, por las siguientes razones: ${norma || "[FUNDAMENTACIÓN JURÍDICA Y FÁCTICA DE LA CLASIFICACIÓN, CON CITA DE LAS NORMAS APLICABLES DEL CST Y/O DEL RIT]"}
+
+DECISIÓN
+En consecuencia, la empresa ha tomado la decisión de imponer: ${c.decision ?? "[DESCRIPCIÓN EXACTA DE LA SANCIÓN — ej. 'PRIMER LLAMADO DE ATENCIÓN ESCRITO, con copia a la hoja de vida' / 'SUSPENSIÓN DEL CONTRATO POR [N] DÍAS HÁBILES, SIN REMUNERACIÓN' / 'TERMINACIÓN DEL CONTRATO CON JUSTA CAUSA, conforme al art. 62 del CST']"}
 
 RECURSOS
-   Se le informa que, conforme al Reglamento Interno de Trabajo y al debido proceso (CN art. 29),
-   podrá interponer los recursos o apelaciones que el reglamento prevea dentro del término establecido.
+De conformidad con los elementos constitutivos del debido proceso en materia disciplinaria, usted dispone del recurso de reposición y, en subsidio, de apelación, para que la presente decisión sea revisada por la instancia superior de la compañía, dentro de los [N] días hábiles siguientes a esta notificación.
+
+Atentamente,
+
+[NOMBRE DE QUIEN SUSCRIBE LA DECISIÓN]                ${c.empleado}
+[CARGO (ej. Representante Legal / Apoderado)]          ${c.cargo}
+${c.empresa}
 
 Fecha de notificación: ____________________
 Firma del trabajador (recibido): ____________________

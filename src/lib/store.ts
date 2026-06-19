@@ -279,3 +279,43 @@ export function setNitEmpresa(nit: string) {
 export function useNitEmpresa(): string {
   return useStore<string>(NIT_KEY, "00");
 }
+
+// ── Liquidaciones registradas (seguimiento de sanción moratoria, CST art. 65) ──
+// Una liquidación se registra como "pendiente" desde la fecha de retiro; mientras
+// no se marque "pagada", se acumula la sanción moratoria (1 día de salario por día).
+const LIQ_REG_KEY = "centinela:liquidaciones-registradas";
+
+export interface LiquidacionRegistrada {
+  id: string;
+  contratoId: string;
+  empleado: string;
+  fechaRetiro: string; // fecha de terminación del contrato (inicio de la mora)
+  total: number; // total de la liquidación de referencia
+  salarioMensual: number; // base del "día de salario" (CST art. 65)
+  causaLabel: string;
+  ts: string; // fecha de registro (ISO)
+  estado: "pendiente" | "pagada";
+  fechaPago?: string; // congela la mora al pagar
+}
+
+export function addLiquidacionRegistrada(l: LiquidacionRegistrada) {
+  const all = read<LiquidacionRegistrada[]>(LIQ_REG_KEY, []);
+  write(LIQ_REG_KEY, [l, ...all.filter((x) => x.id !== l.id)]);
+}
+
+export function marcarLiquidacionPagada(id: string, fechaPago: string) {
+  const all = read<LiquidacionRegistrada[]>(LIQ_REG_KEY, []);
+  write(
+    LIQ_REG_KEY,
+    all.map((x) => (x.id === id ? { ...x, estado: "pagada" as const, fechaPago } : x))
+  );
+}
+
+export function removeLiquidacionRegistrada(id: string) {
+  const all = read<LiquidacionRegistrada[]>(LIQ_REG_KEY, []);
+  write(LIQ_REG_KEY, all.filter((x) => x.id !== id));
+}
+
+export function useLiquidacionesRegistradas(): LiquidacionRegistrada[] {
+  return useStore<LiquidacionRegistrada[]>(LIQ_REG_KEY, []);
+}

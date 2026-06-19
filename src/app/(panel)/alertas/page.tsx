@@ -4,13 +4,14 @@ import { PageHeader } from "@/components/AppShell";
 import { Card, Badge, Dot, sevTone, sevLabel, sevColor } from "@/components/ui";
 import { Reveal } from "@/components/motion";
 import { generarAlertas } from "@/lib/alertas";
-import { useEmpresaActiva } from "@/lib/store";
+import { useEmpresaActiva, useContratosConfirmados } from "@/lib/store";
 import { ArrowRight2 } from "iconsax-react";
 import Link from "next/link";
 
 export default function AlertasPage() {
   const empresa = useEmpresaActiva();
-  const alertas = empresa ? generarAlertas(empresa.contratos, empresa.hoy) : [];
+  const confirmados = useContratosConfirmados();
+  const alertas = empresa ? generarAlertas([...confirmados, ...empresa.contratos], empresa.hoy) : [];
   const counts = {
     critica: alertas.filter((a) => a.severidad === "critica").length,
     alta: alertas.filter((a) => a.severidad === "alta").length,
@@ -33,6 +34,15 @@ export default function AlertasPage() {
         {counts.info > 0 && <Badge tone="neutral">{counts.info} informativas</Badge>}
       </div>
 
+      {alertas.length === 0 ? (
+        <Card className="px-5 py-14 text-center">
+          <div className="text-[28px] leading-none" style={{ color: "var(--success)" }}>✓</div>
+          <p className="mt-2 text-[14px] font-medium text-ink">Sin alertas abiertas</p>
+          <p className="mt-1 text-[12.5px] text-ink-2">
+            No hay vencimientos ni obligaciones pendientes para la empresa seleccionada.
+          </p>
+        </Card>
+      ) : (
       <div className="space-y-2.5">
         {alertas.map((a, i) => (
           <Reveal key={a.id} delay={Math.min(i * 0.04, 0.4)}>
@@ -75,6 +85,7 @@ export default function AlertasPage() {
           </Reveal>
         ))}
       </div>
+      )}
     </div>
   );
 }
