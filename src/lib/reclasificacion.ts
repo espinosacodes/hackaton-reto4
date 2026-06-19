@@ -6,7 +6,7 @@ import { Contrato, ReclasificacionResultado } from "./types";
 // Cada indicio tiene un peso; el puntaje agregado define el nivel de riesgo.
 // ─────────────────────────────────────────────────────────────────────────
 
-interface Indicio {
+export interface Indicio {
   key: keyof NonNullable<Contrato["subordinacion"]>;
   senal: string;
   peso: number;
@@ -14,7 +14,7 @@ interface Indicio {
   algoritmica?: boolean;
 }
 
-const INDICIOS: Indicio[] = [
+export const INDICIOS: Indicio[] = [
   { key: "horarioFijo", senal: "Cumple un horario fijo impuesto", peso: 14, norma: "CST art. 23.b" },
   { key: "supervisionDirecta", senal: "Está sujeto a supervisión y control directo", peso: 14, norma: "CST art. 23.b" },
   { key: "instruccionesDetalladas", senal: "Recibe instrucciones detalladas sobre cómo ejecutar la labor", peso: 12, norma: "CST art. 23.b" },

@@ -104,7 +104,8 @@ export interface Alerta {
     | "liquidacion_pendiente"
     | "seguridad_social"
     | "reclasificacion"
-    | "jornada_2101";
+    | "jornada_2101"
+    | "reforma_2466";
   severidad: Severidad;
   titulo: string;
   detalle: string;

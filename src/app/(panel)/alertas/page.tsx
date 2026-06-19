@@ -12,6 +12,7 @@ export default function AlertasPage() {
     critica: alertas.filter((a) => a.severidad === "critica").length,
     alta: alertas.filter((a) => a.severidad === "alta").length,
     media: alertas.filter((a) => a.severidad === "media").length,
+    info: alertas.filter((a) => a.severidad === "info").length,
   };
 
   return (
@@ -26,6 +27,7 @@ export default function AlertasPage() {
         <Badge tone="red">{counts.critica} críticas</Badge>
         <Badge tone="warning">{counts.alta} altas</Badge>
         <Badge tone="info">{counts.media} medias</Badge>
+        {counts.info > 0 && <Badge tone="neutral">{counts.info} informativas</Badge>}
       </div>
 
       <div className="space-y-2.5">

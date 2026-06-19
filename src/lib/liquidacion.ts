@@ -9,7 +9,8 @@ export const PARAMS_2026 = {
   anio: 2026,
   smmlv: 1_750_905,
   auxilioTransporte: 249_095,
-  // El auxilio de transporte se causa hasta 2 SMMLV (art. 2 Ley 15/1959).
+  // El derecho al auxilio de transporte nace de la Ley 15/1959 (art. 2); su monto
+  // y el tope de 2 SMMLV los fija el Gobierno por decreto reglamentario cada año.
   topeAuxilioSmmlv: 2,
   // Interés sobre cesantías: 12% anual (Ley 52/1975).
   tasaInteresCesantias: 0.12,
@@ -29,6 +30,16 @@ export function auxilioAplicable(c: Contrato, p: Params = PARAMS_2026): number {
 
 const round = (n: number) => Math.round(n);
 
+// Modo de liquidación:
+//  - "periodo": liquidación definitiva del periodo NO consignado (cesantías e intereses
+//    del año en curso, prima del semestre en curso, vacaciones desde el último disfrute).
+//    Asume que los periodos anteriores ya se consignaron/pagaron. Es lo correcto al terminar.
+//  - "acumulado": pasivo total asumiendo que NUNCA se pagó nada (mora total). Solo para
+//    estimar contingencia, no como liquidación definitiva.
+export type ModoLiquidacion = "periodo" | "acumulado";
+
+const maxFecha = (a: string, b: string) => (a > b ? a : b);
+
 /**
  * Liquida prestaciones sociales de forma DETERMINISTA y auditable.
  * No interviene ningún modelo de IA: cada línea expone su fórmula y su norma.
@@ -37,15 +48,38 @@ export function liquidar(
   c: Contrato,
   hasta: string,
   causa: CausaTerminacion,
-  p: Params = PARAMS_2026
+  p: Params = PARAMS_2026,
+  modo: ModoLiquidacion = "periodo"
 ): LiquidacionResultado {
   const lineas: LiquidacionLinea[] = [];
   const notas: string[] = [];
 
-  const dias = days360(c.fechaInicio, hasta);
+  const diasTotales = days360(c.fechaInicio, hasta); // antigüedad total
   const aux = auxilioAplicable(c, p);
   const baseConAux = c.salarioMensual + aux; // base prestacional
   const salarioDiario = c.salarioMensual / 30;
+
+  // Periodo a liquidar por concepto (cada prestación tiene su propia causación).
+  const acumulado = modo === "acumulado";
+  const anio = hasta.slice(0, 4);
+  const inicioAnio = `${anio}-01-01`;
+  const inicioSemestre = Number(hasta.slice(5, 7)) <= 6 ? `${anio}-01-01` : `${anio}-07-01`;
+
+  const desdeCesantias = acumulado ? c.fechaInicio : maxFecha(c.fechaInicio, inicioAnio);
+  const desdePrima = acumulado ? c.fechaInicio : maxFecha(c.fechaInicio, inicioSemestre);
+  const desdeVac = c.ultimasVacacionesTomadas
+    ? maxFecha(c.fechaInicio, c.ultimasVacacionesTomadas)
+    : c.fechaInicio;
+
+  const diasCesantias = days360(desdeCesantias, hasta);
+  const diasPrima = days360(desdePrima, hasta);
+  const diasVac = days360(desdeVac, hasta);
+
+  notas.push(
+    acumulado
+      ? "Modo PASIVO ACUMULADO: liquida toda la antigüedad asumiendo que no se consignó ni pagó nada (mora total). Úselo solo para estimar contingencia, no como liquidación definitiva."
+      : "Modo LIQUIDACIÓN DEL PERIODO: cesantías e intereses del año en curso, prima del semestre en curso, vacaciones desde el último disfrute. Se asume que los periodos anteriores fueron consignados/pagados; el área contable debe validarlo contra los pagos reales."
+  );
 
   if (c.salarioIntegral) {
     notas.push(
@@ -55,59 +89,77 @@ export function liquidar(
 
   // 1. Cesantías — CST arts. 249–252
   if (!c.salarioIntegral) {
-    const valor = (baseConAux * dias) / 360;
+    const valor = (baseConAux * diasCesantias) / 360;
     lineas.push({
       concepto: "Cesantías",
-      base: `Salario + auxilio de transporte = ${baseConAux.toLocaleString("es-CO")}`,
-      formula: `(${baseConAux.toLocaleString("es-CO")} × ${dias}) ÷ 360`,
-      dias,
+      base: `Salario + auxilio = ${baseConAux.toLocaleString("es-CO")} · ${desdeCesantias} → ${hasta}`,
+      formula: `(${baseConAux.toLocaleString("es-CO")} × ${diasCesantias}) ÷ 360`,
+      dias: diasCesantias,
       valor: round(valor),
       norma: "CST arts. 249–252",
     });
 
-    // 2. Intereses a las cesantías — Ley 52/1975 (12% anual)
-    const intereses = (round(valor) * dias * p.tasaInteresCesantias) / 360;
+    // 2. Intereses a las cesantías — Ley 52/1975 (12% anual sobre el saldo de cesantías).
+    // En "periodo": proporcional al año en curso (≤1). En "acumulado": acumulación año a año
+    // sobre el saldo creciente → factor (años+1)/2 (ni tope de 1 año ni crecimiento cuadrático).
+    // Pendiente de validación final con el área contable.
+    const aniosCes = diasCesantias / 360;
+    const factorInteres = acumulado ? (aniosCes + 1) / 2 : Math.min(aniosCes, 1);
+    const intereses = round(valor) * p.tasaInteresCesantias * factorInteres;
     lineas.push({
       concepto: "Intereses sobre cesantías",
-      base: `12% anual sobre cesantías causadas`,
-      formula: `(${round(valor).toLocaleString("es-CO")} × ${dias} × 0.12) ÷ 360`,
-      dias,
+      base: acumulado
+        ? "12% anual acumulado sobre el saldo de cesantías (mora multianual)"
+        : "12% anual proporcional al periodo",
+      formula: acumulado
+        ? `${round(valor).toLocaleString("es-CO")} × 12% × ((${aniosCes.toFixed(1)} + 1) ÷ 2)`
+        : `${round(valor).toLocaleString("es-CO")} × 12% × ${factorInteres.toFixed(2)}`,
+      dias: diasCesantias,
       valor: round(intereses),
       norma: "Ley 52 de 1975",
     });
 
-    // 3. Prima de servicios — CST arts. 306–307 (30 días/año)
-    const prima = (baseConAux * dias) / 360;
+    // 3. Prima de servicios — CST arts. 306–307 (30 días/año, semestral)
+    const prima = (baseConAux * diasPrima) / 360;
     lineas.push({
       concepto: "Prima de servicios",
-      base: `Salario + auxilio de transporte (30 días por año)`,
-      formula: `(${baseConAux.toLocaleString("es-CO")} × ${dias}) ÷ 360`,
-      dias,
+      base: `Salario + auxilio (30 días/año) · ${desdePrima} → ${hasta}`,
+      formula: `(${baseConAux.toLocaleString("es-CO")} × ${diasPrima}) ÷ 360`,
+      dias: diasPrima,
       valor: round(prima),
       norma: "CST arts. 306–307",
     });
   }
 
-  // 4. Vacaciones — CST arts. 186–192 (15 días hábiles/año, sin auxilio)
-  const vacaciones = (c.salarioMensual * dias) / 720;
+  // 4. Vacaciones — CST arts. 186, 189 (15 días de salario por año, sin auxilio)
+  const vacaciones = (c.salarioMensual * diasVac) / 720;
   lineas.push({
     concepto: "Vacaciones",
-    base: `Salario ordinario sin auxilio (15 días por año)`,
-    formula: `(${c.salarioMensual.toLocaleString("es-CO")} × ${dias}) ÷ 720`,
-    dias,
+    base: `Salario ordinario sin auxilio (15 días/año) · ${desdeVac} → ${hasta}`,
+    formula: `(${c.salarioMensual.toLocaleString("es-CO")} × ${diasVac}) ÷ 720`,
+    dias: diasVac,
     valor: round(vacaciones),
-    norma: "CST arts. 186–192",
+    norma: "CST arts. 186, 189",
   });
 
-  // 5. Indemnización por despido sin justa causa — CST art. 64
+  // 5. Indemnización por despido sin justa causa — CST art. 64 (sobre la antigüedad total)
   if (causa === "sin_justa_causa") {
-    const indem = calcularIndemnizacion(c, hasta, dias, salarioDiario, p);
-    if (indem) lineas.push(indem);
-  } else if (causa === "renuncia" || causa === "justa_causa") {
-    notas.push("No se causa indemnización (terminación por renuncia o justa causa).");
+    const indem = calcularIndemnizacion(c, hasta, diasTotales, salarioDiario, p);
+    if (indem) {
+      lineas.push(indem);
+      if ((c.tipo === "fijo" || c.tipo === "obra_labor" || c.tipo === "aprendizaje") && (indem.dias ?? 0) <= 0) {
+        notas.push(
+          "El plazo del contrato ya venció: la indemnización por tiempo faltante es $0. Verifique si la causa correcta es 'vencimiento del plazo'."
+        );
+      }
+    }
+  } else if (causa === "justa_causa") {
+    notas.push("No se causa indemnización: la terminación se fundamenta en una justa causa comprobada.");
+  } else if (causa === "renuncia") {
+    notas.push("No se causa indemnización (renuncia voluntaria del trabajador).");
   } else if (causa === "vencimiento_plazo") {
     notas.push(
-      "Terminación por vencimiento del plazo pactado: no hay indemnización si medió preaviso de 30 días (CST art. 46)."
+      "El vencimiento del plazo pactado es un modo legal de terminación (CST art. 61, lit. c) y no genera indemnización. El preaviso de 30 días (CST art. 46) solo evita la prórroga automática; su omisión prorroga el contrato por un periodo igual."
     );
   }
 
@@ -118,7 +170,7 @@ export function liquidar(
     empleado: c.empleado,
     desde: c.fechaInicio,
     hasta,
-    diasLaborados: dias,
+    diasLaborados: diasTotales,
     baseLiquidacion: baseConAux,
     lineas,
     total: round(total),
@@ -134,17 +186,21 @@ function calcularIndemnizacion(
   salarioDiario: number,
   p: Params
 ): LiquidacionLinea | null {
-  // Término fijo / obra: salarios por el tiempo que falte para el vencimiento (mín. 15 días).
-  if ((c.tipo === "fijo" || c.tipo === "obra_labor") && c.fechaFin) {
+  // Término fijo / obra / aprendizaje (todos a plazo): salarios por el tiempo que falte
+  // para el vencimiento (mín. 15 días en obra o labor).
+  if ((c.tipo === "fijo" || c.tipo === "obra_labor" || c.tipo === "aprendizaje") && c.fechaFin) {
     const faltan = Math.max(days360(hasta, c.fechaFin), 0);
     const diasIndem = c.tipo === "obra_labor" ? Math.max(faltan, 15) : faltan;
+    const esAprendiz = c.tipo === "aprendizaje";
     return {
       concepto: "Indemnización (despido sin justa causa)",
-      base: `Salarios del tiempo faltante hasta ${c.fechaFin}`,
+      base: esAprendiz
+        ? `Salarios del tiempo faltante hasta ${c.fechaFin} (aprendizaje: contrato laboral especial, Ley 2466/2025)`
+        : `Salarios del tiempo faltante hasta ${c.fechaFin}`,
       formula: `${diasIndem} días × ${round(salarioDiario).toLocaleString("es-CO")}`,
       dias: diasIndem,
       valor: round(diasIndem * salarioDiario),
-      norma: "CST art. 64 (contrato a término fijo)",
+      norma: esAprendiz ? "Ley 2466/2025 art. 21; CST art. 64" : "CST art. 64 (contrato a término fijo)",
     };
   }
 
