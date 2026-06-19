@@ -49,15 +49,21 @@ export function liquidar(
   hasta: string,
   causa: CausaTerminacion,
   p: Params = PARAMS_2026,
-  modo: ModoLiquidacion = "periodo"
+  modo: ModoLiquidacion = "periodo",
+  factorVariable = 0
 ): LiquidacionResultado {
   const lineas: LiquidacionLinea[] = [];
   const notas: string[] = [];
 
   const diasTotales = days360(c.fechaInicio, hasta); // antigüedad total
+  // Factor salarial variable (promedio mensual de horas extra/recargos habituales).
+  // Es salario (CST art. 127) y, cuando es habitual, incrementa la base de prestaciones.
+  // En salario integral ya está incluido, así que no se suma.
+  const fv = c.salarioIntegral ? 0 : Math.max(0, factorVariable);
+  const salarioBase = c.salarioMensual + fv;
   const aux = auxilioAplicable(c, p);
-  const baseConAux = c.salarioMensual + aux; // base prestacional
-  const salarioDiario = c.salarioMensual / 30;
+  const baseConAux = salarioBase + aux; // base prestacional (cesantías, prima)
+  const salarioDiario = salarioBase / 30;
 
   // Periodo a liquidar por concepto (cada prestación tiene su propia causación).
   const acumulado = modo === "acumulado";
@@ -84,6 +90,12 @@ export function liquidar(
   if (c.salarioIntegral) {
     notas.push(
       "Salario integral (CST art. 132): el factor prestacional (≥30%) ya remunera cesantías, intereses y prima. Sólo se liquidan vacaciones."
+    );
+  }
+
+  if (fv > 0) {
+    notas.push(
+      `Factor salarial variable incluido en la base: ${fv.toLocaleString("es-CO")}/mes (promedio de horas extra/recargos habituales, salario conforme al CST art. 127).`
     );
   }
 
@@ -132,11 +144,11 @@ export function liquidar(
   }
 
   // 4. Vacaciones — CST arts. 186, 189 (15 días de salario por año, sin auxilio)
-  const vacaciones = (c.salarioMensual * diasVac) / 720;
+  const vacaciones = (salarioBase * diasVac) / 720;
   lineas.push({
     concepto: "Vacaciones",
     base: `Salario ordinario sin auxilio (15 días/año) · ${desdeVac} → ${hasta}`,
-    formula: `(${c.salarioMensual.toLocaleString("es-CO")} × ${diasVac}) ÷ 720`,
+    formula: `(${salarioBase.toLocaleString("es-CO")} × ${diasVac}) ÷ 720`,
     dias: diasVac,
     valor: round(vacaciones),
     norma: "CST arts. 186, 189",

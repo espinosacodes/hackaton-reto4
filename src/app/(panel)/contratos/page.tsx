@@ -9,7 +9,7 @@ import { CONTRATOS } from "@/lib/data/contratos";
 import { addContratoConfirmado, logAudit, useBusqueda, setBusqueda } from "@/lib/store";
 import { Contrato } from "@/lib/types";
 import { cop, fmtDate } from "@/lib/utils";
-import { DocumentUpload, Flash, TickCircle, People, Cpu, Warning2 } from "iconsax-react";
+import { DocumentUpload, Flash, TickCircle, People, Cpu, Warning2, ArrowDown2 } from "iconsax-react";
 
 const tipoLabel: Record<string, string> = {
   indefinido: "Indefinido",
@@ -38,6 +38,7 @@ export default function ContratosPage() {
   const [cargando, setCargando] = useState(false);
   const [extraccion, setExtraccion] = useState<Record<string, unknown> | null>(null);
   const [leyendo, setLeyendo] = useState(false);
+  const [expandido, setExpandido] = useState<string | null>(null);
 
   // Revisión humana: copia editable de lo extraído + estado de validación.
   // Al llegar una nueva extracción reseteamos en render (patrón recomendado por React).
@@ -355,7 +356,11 @@ export default function ContratosPage() {
           )}
           {nomina.map((c, i) => (
             <Reveal key={c.id} delay={Math.min(i, 8) * 0.04}>
-              <Row c={c} />
+              <Row
+                c={c}
+                abierto={expandido === c.id}
+                onToggle={() => setExpandido((e) => (e === c.id ? null : c.id))}
+              />
             </Reveal>
           ))}
         </div>
@@ -397,34 +402,75 @@ function mockClient(text: string): Record<string, unknown> {
   };
 }
 
-function Row({ c }: { c: Contrato }) {
+function Row({ c, abierto, onToggle }: { c: Contrato; abierto: boolean; onToggle: () => void }) {
   const confPct = Math.round((c.extraccionConfianza ?? 0) * 100);
+  const confColor = confPct >= 85 ? "var(--success)" : confPct >= 60 ? "var(--warning)" : "var(--red)";
   return (
-    <div className="grid grid-cols-12 items-center gap-3 px-5 py-3 text-[13px] transition-colors hover:bg-surface-2">
-      <div className="col-span-4">
-        <div className="font-medium text-ink">{c.empleado}</div>
-        <div className="text-[11px] text-ink-3">{c.cargo} · {c.area}</div>
-      </div>
-      <div className="col-span-3">
-        <Badge tone={tipoTone[c.tipo] ?? "neutral"}>{tipoLabel[c.tipo]}</Badge>
-      </div>
-      <div className="col-span-2 text-right font-num text-ink">{cop(c.salarioMensual)}</div>
-      <div className="col-span-2 text-[12px] text-ink-2">
-        {fmtDate(c.fechaInicio)}
-        {c.fechaFin && <span className="text-ink-3"> → {fmtDate(c.fechaFin)}</span>}
-      </div>
-      <div className="col-span-1 text-right">
-        <span
-          className="font-num text-[11.5px]"
-          style={{
-            color:
-              confPct >= 85 ? "var(--success)" : confPct >= 60 ? "var(--warning)" : "var(--red)",
-          }}
-          title="Nivel de confianza con que la IA extrajo los datos de este contrato"
-        >
-          {confPct}%
-        </span>
-      </div>
+    <div>
+      <button
+        onClick={onToggle}
+        className="grid w-full grid-cols-12 items-center gap-3 px-5 py-3 text-left text-[13px] transition-colors hover:bg-surface-2"
+        style={{ background: abierto ? "var(--surface-2)" : undefined }}
+        aria-expanded={abierto}
+      >
+        <div className="col-span-4 flex items-center gap-2">
+          <ArrowDown2
+            size={13}
+            color="var(--ink-3)"
+            style={{ transform: abierto ? "rotate(180deg)" : "none", transition: "transform .15s" }}
+            className="shrink-0"
+          />
+          <div className="min-w-0">
+            <div className="font-medium text-ink">{c.empleado}</div>
+            <div className="text-[11px] text-ink-3">{c.cargo} · {c.area}</div>
+          </div>
+        </div>
+        <div className="col-span-3">
+          <Badge tone={tipoTone[c.tipo] ?? "neutral"}>{tipoLabel[c.tipo]}</Badge>
+        </div>
+        <div className="col-span-2 text-right font-num text-ink">{cop(c.salarioMensual)}</div>
+        <div className="col-span-2 text-[12px] text-ink-2">
+          {fmtDate(c.fechaInicio)}
+          {c.fechaFin && <span className="text-ink-3"> → {fmtDate(c.fechaFin)}</span>}
+        </div>
+        <div className="col-span-1 text-right">
+          <span
+            className="font-num text-[11.5px]"
+            style={{ color: confColor }}
+            title="Nivel de confianza con que la IA extrajo los datos de este contrato"
+          >
+            {confPct}%
+          </span>
+        </div>
+      </button>
+
+      {abierto && (
+        <div className="border-t border-border bg-surface px-5 py-3.5">
+          <div className="overline mb-2">Datos extraídos del contrato</div>
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-[12px] sm:grid-cols-3">
+            <Campo k="Documento" v={c.documento} />
+            <Campo k="Tipo de vínculo" v={tipoLabel[c.tipo] ?? c.tipo} />
+            <Campo k="Jornada" v={`${c.horasSemana} h/sem`} />
+            <Campo k="Salario" v={cop(c.salarioMensual)} />
+            <Campo k="Salario integral" v={c.salarioIntegral ? "Sí" : "No"} />
+            <Campo k="Auxilio transporte" v={c.auxilioTransporte ? "Sí" : "No"} />
+            <Campo k="Ingreso" v={fmtDate(c.fechaInicio)} />
+            <Campo k="Vencimiento" v={c.fechaFin ? fmtDate(c.fechaFin) : "—"} />
+            <Campo k="Estado" v={c.estado} />
+            {c.ultimasVacacionesTomadas ? (
+              <Campo k="Últimas vacaciones" v={fmtDate(c.ultimasVacacionesTomadas)} />
+            ) : null}
+            {c.diasVacacionesPendientes != null ? (
+              <Campo k="Vac. pendientes" v={`${c.diasVacacionesPendientes} días`} />
+            ) : null}
+            {c.ultimoPagoSeguridadSocial ? (
+              <Campo k="Últ. pago seg. social" v={fmtDate(c.ultimoPagoSeguridadSocial)} />
+            ) : null}
+            <Campo k="Confianza IA" v={`${confPct}%`} />
+            <Campo k="Fuente" v={c.fuente === "ia" ? "IA" : "Manual"} />
+          </dl>
+        </div>
+      )}
     </div>
   );
 }

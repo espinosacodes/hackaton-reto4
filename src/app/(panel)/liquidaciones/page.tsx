@@ -1,15 +1,16 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { PageHeader } from "@/components/AppShell";
 import { Card, CardHeader, Badge, Button } from "@/components/ui";
 import { Reveal } from "@/components/motion";
 import { CONTRATOS, HOY } from "@/lib/data/contratos";
 import { liquidar, compararLiquidacion, type ModoLiquidacion } from "@/lib/liquidacion";
+import { calcularRecargo, CONCEPTOS_RECARGO, type TipoHora } from "@/lib/recargos";
 import { useContratosConfirmados, useParametros, logAudit } from "@/lib/store";
 import { CausaTerminacion } from "@/lib/types";
 import { cop, fmtDate } from "@/lib/utils";
-import { Calculator, TickCircle, CloseCircle, Warning2, InfoCircle } from "iconsax-react";
+import { Calculator, TickCircle, CloseCircle, Warning2, InfoCircle, Clock } from "iconsax-react";
 
 const CAUSAS: { value: CausaTerminacion; label: string }[] = [
   { value: "sin_justa_causa", label: "Despido sin justa causa" },
@@ -29,11 +30,32 @@ export default function LiquidacionesPage() {
   const params = useParametros();
   const todos = useMemo(() => [...confirmados, ...CONTRATOS], [confirmados]);
   const contrato = todos.find((c) => c.id === id) ?? todos[0];
-  const liq = useMemo(
-    () => liquidar(contrato, hasta, causa, params, modo),
-    [contrato, hasta, causa, modo, params]
+
+  // Horas extra / recargos del periodo → factor salarial variable de la liquidación.
+  const idRef = useRef(1);
+  const [nuevoTipo, setNuevoTipo] = useState<TipoHora>("extra_diurna");
+  const [nuevasHoras, setNuevasHoras] = useState("");
+  const [novedades, setNovedades] = useState<{ id: number; tipo: TipoHora; horas: string }[]>([]);
+  const factorVariable = useMemo(
+    () =>
+      novedades.reduce((s, n) => {
+        const h = Number(n.horas.replace(/[^\d.]/g, "")) || 0;
+        return s + calcularRecargo(contrato.salarioMensual, n.tipo, h, hasta, contrato.horasSemana).total;
+      }, 0),
+    [novedades, contrato, hasta]
   );
-  const casoKey = `${contrato.id}|${causa}|${modo}|${hasta}`;
+  function agregarNovedad() {
+    const h = Number(nuevasHoras.replace(/[^\d.]/g, "")) || 0;
+    if (h <= 0) return;
+    setNovedades((prev) => [...prev, { id: idRef.current++, tipo: nuevoTipo, horas: nuevasHoras }]);
+    setNuevasHoras("");
+  }
+
+  const liq = useMemo(
+    () => liquidar(contrato, hasta, causa, params, modo, factorVariable),
+    [contrato, hasta, causa, modo, params, factorVariable]
+  );
+  const casoKey = `${contrato.id}|${causa}|${modo}|${hasta}|${factorVariable}`;
 
   const comparacion =
     pagado.trim() !== "" ? compararLiquidacion(liq.total, Number(pagado.replace(/\D/g, ""))) : null;
@@ -119,6 +141,73 @@ export default function LiquidacionesPage() {
             </div>
           </Card>
 
+          <Card className="mt-3">
+            <CardHeader
+              overline="Factor salarial variable"
+              title="Horas extra y recargos"
+              right={<Clock size={18} color="var(--red)" />}
+            />
+            <div className="space-y-2.5 px-5 py-4">
+              <p className="text-[11px] text-ink-3">
+                Promedio mensual de horas extra/recargos. Es salario (CST art. 127) y entra a la base de las prestaciones.
+              </p>
+              <select
+                value={nuevoTipo}
+                onChange={(e) => setNuevoTipo(e.target.value as TipoHora)}
+                className="input text-[12px]"
+              >
+                {CONCEPTOS_RECARGO.map((x) => (
+                  <option key={x.key} value={x.key}>{x.label}</option>
+                ))}
+              </select>
+              <div className="flex gap-2">
+                <input
+                  inputMode="decimal"
+                  placeholder="Horas/mes"
+                  value={nuevasHoras}
+                  onChange={(e) => setNuevasHoras(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") agregarNovedad(); }}
+                  className="input font-num"
+                />
+                <Button variant="secondary" onClick={agregarNovedad}>Agregar</Button>
+              </div>
+
+              {novedades.length > 0 && (
+                <div className="hairline divide-y divide-border">
+                  {novedades.map((n) => {
+                    const h = Number(n.horas.replace(/[^\d.]/g, "")) || 0;
+                    const r = calcularRecargo(contrato.salarioMensual, n.tipo, h, hasta, contrato.horasSemana);
+                    return (
+                      <div key={n.id} className="flex items-center gap-2 px-3 py-1.5 text-[11.5px]">
+                        <span className="min-w-0 flex-1 truncate text-ink-2">{r.label} · {h} h</span>
+                        <span className="font-num text-ink">{cop(r.total)}</span>
+                        <button
+                          onClick={() => setNovedades((prev) => prev.filter((x) => x.id !== n.id))}
+                          className="text-ink-3 hover:text-red"
+                          aria-label="Quitar"
+                        >
+                          <CloseCircle size={14} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {factorVariable > 0 && (
+                <div className="flex items-center justify-between border-t border-border pt-2 text-[12.5px]">
+                  <span className="font-medium text-ink">Factor mensual → base</span>
+                  <span className="font-num text-ink">{cop(factorVariable)}</span>
+                </div>
+              )}
+              {contrato.salarioIntegral && novedades.length > 0 && (
+                <p className="text-[11px] text-warning">
+                  Salario integral: ya incluye los recargos, no se suma a la base.
+                </p>
+              )}
+            </div>
+          </Card>
+
           <div className="mt-3 hairline flex items-start gap-2 bg-[var(--info-tint)] px-4 py-3">
             <InfoCircle size={16} color="var(--info)" className="mt-0.5 shrink-0" />
             <p className="text-[12px] leading-snug text-ink-2">
@@ -129,7 +218,7 @@ export default function LiquidacionesPage() {
 
         {/* Result */}
         <div className="lg:col-span-2">
-          <Reveal key={id + causa + hasta + modo}>
+          <Reveal key={`${id}${causa}${hasta}${modo}${factorVariable}`}>
             <Card>
               <CardHeader
                 overline="Resultado"

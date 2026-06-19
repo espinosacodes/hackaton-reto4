@@ -9,15 +9,8 @@ import { cop, copShort, fmtDate } from "@/lib/utils";
 import { liquidar } from "@/lib/liquidacion";
 import { useParametros } from "@/lib/store";
 import { HOY } from "@/lib/data/contratos";
-import {
-  Warning2,
-  DocumentText,
-  Convertshape2,
-  Calculator,
-  ArrowRight2,
-  Danger,
-  People,
-} from "iconsax-react";
+import { NAV } from "@/components/nav";
+import { Warning2, Convertshape2, ArrowRight2, Danger, People } from "iconsax-react";
 
 const LABORALES = ["indefinido", "fijo", "obra_labor", "aprendizaje"];
 
@@ -147,20 +140,19 @@ export default function Dashboard() {
         </Reveal>
       </div>
 
-      {/* Module shortcuts */}
-      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {[
-          { href: "/contratos", icon: DocumentText, title: "Lectura contractual", desc: "Extracción IA de tipo, jornada y obligaciones." },
-          { href: "/liquidaciones", icon: Calculator, title: "Verificar liquidación", desc: "Cesantías, prima, vacaciones e indemnización." },
-          { href: "/disciplinario", icon: Warning2, title: "Proceso disciplinario", desc: "Pliego de cargos y debido proceso (art. 29 CN)." },
-          { href: "/reclasificacion", icon: Convertshape2, title: "Reclasificación", desc: "Subordinación algorítmica · Ley 2466/2025." },
-        ].map((m, i) => (
+      {/* Servicios activos — derivados del menú para que siempre coincidan con lo que existe */}
+      <div className="mb-2 mt-5 flex items-baseline gap-2">
+        <h2 className="font-head text-[16px] text-ink">Servicios activos</h2>
+        <span className="text-[12px] text-ink-3">· {NAV.filter((m) => m.href !== "/").length} módulos</span>
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {NAV.filter((m) => m.href !== "/").map((m, i) => (
           <Reveal key={m.href} delay={0.2 + i * 0.05}>
             <Link href={m.href}>
               <Card className="group h-full px-5 py-4 transition-colors hover:border-border-2 hover:bg-surface-2">
                 <m.icon size={22} color="var(--red)" variant="Bulk" />
                 <div className="mt-3 flex items-center gap-1 font-head text-[14px] text-ink">
-                  {m.title}
+                  {m.label}
                   <ArrowRight2 size={14} className="opacity-0 transition-opacity group-hover:opacity-100" />
                 </div>
                 <div className="mt-1 text-[12px] leading-snug text-ink-2">{m.desc}</div>

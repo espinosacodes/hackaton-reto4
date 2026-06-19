@@ -14,7 +14,9 @@ import { PARAMS_2026 } from "./liquidacion";
 const AUDIT_KEY = "centinela:auditoria";
 const CONTRATOS_KEY = "centinela:contratos-confirmados";
 const DOCS_KEY = "centinela:documentos-perfil";
+const LINEAMIENTOS_KEY = "centinela:tipos-lineamiento";
 const PARAMS_KEY = "centinela:parametros";
+const NIT_KEY = "centinela:nit-empresa";
 const EVT = "centinela:store-cambio";
 
 export interface AuditEvento {
@@ -115,6 +117,37 @@ export function useDocumentosPerfil(): DocumentoPerfil[] {
   return useStore<DocumentoPerfil[]>(DOCS_KEY, []);
 }
 
+// ── Tipos de lineamiento interno (categorías de documentos del Perfil) ────────
+// Editables: la empresa puede agregar (SARLAFT, SST…) o eliminar los que no use.
+
+export interface TipoLineamiento {
+  tipo: string;
+  desc: string;
+}
+
+export const LINEAMIENTOS_DEFAULT: TipoLineamiento[] = [
+  { tipo: "Reglamento Interno de Trabajo (RIT)", desc: "Base del régimen disciplinario y de las faltas (CST art. 115)." },
+  { tipo: "Manual de convivencia / conducta", desc: "Conductas esperadas y faltas de convivencia." },
+  { tipo: "PTEE (transparencia y ética)", desc: "Programa de Transparencia y Ética Empresarial." },
+  { tipo: "Convención / pacto colectivo", desc: "Acuerdos colectivos aplicables." },
+  { tipo: "Código de ética", desc: "Principios y deberes de conducta." },
+];
+
+export function useTiposLineamiento(): TipoLineamiento[] {
+  return useStore<TipoLineamiento[]>(LINEAMIENTOS_KEY, LINEAMIENTOS_DEFAULT);
+}
+
+export function addTipoLineamiento(tipo: string, desc = "Lineamiento interno de la empresa.") {
+  const all = read<TipoLineamiento[]>(LINEAMIENTOS_KEY, LINEAMIENTOS_DEFAULT);
+  if (all.some((t) => t.tipo.toLowerCase() === tipo.toLowerCase())) return;
+  write(LINEAMIENTOS_KEY, [...all, { tipo, desc }]);
+}
+
+export function removeTipoLineamiento(tipo: string) {
+  const all = read<TipoLineamiento[]>(LINEAMIENTOS_KEY, LINEAMIENTOS_DEFAULT);
+  write(LINEAMIENTOS_KEY, all.filter((t) => t.tipo !== tipo));
+}
+
 // ── Parámetros de liquidación 2026 (editables por la empresa) ────────────────
 
 export type Parametros = typeof PARAMS_2026;
@@ -141,4 +174,14 @@ export function setBusqueda(q: string) {
 
 export function useBusqueda(): string {
   return useStore<string>(BUSQUEDA_KEY, "");
+}
+
+// ── Datos de la empresa: NIT (2 últimos dígitos, para el calendario PILA) ──────
+
+export function setNitEmpresa(nit: string) {
+  write(NIT_KEY, nit);
+}
+
+export function useNitEmpresa(): string {
+  return useStore<string>(NIT_KEY, "00");
 }
