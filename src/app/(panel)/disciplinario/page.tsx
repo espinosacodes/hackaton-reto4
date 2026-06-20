@@ -812,6 +812,15 @@ export default function DisciplinarioPage() {
 
                       {recoSancion && !recoSancion.error && (
                         <div className="mt-3 space-y-2 text-[12.5px]">
+                          {/* Titular directivo: «Debería aplicarse una sanción de X» */}
+                          <div className="rounded-md border border-[var(--red)]/30 bg-[var(--red-tint)] px-3 py-2">
+                            <p className="text-[13.5px] font-semibold leading-snug text-red-dark">
+                              {String(
+                                recoSancion.titular ??
+                                  `Debería aplicarse: ${SANCION_TIPO_LABEL[String(recoSancion.tipo ?? "")] ?? String(recoSancion.sancion ?? "")}`,
+                              )}
+                            </p>
+                          </div>
                           <div className="flex flex-wrap items-center gap-2">
                             <Badge tone="warning">
                               {SANCION_TIPO_LABEL[String(recoSancion.tipo ?? "")] ?? "Recomendación"}
@@ -861,7 +870,8 @@ export default function DisciplinarioPage() {
                           <Button
                             variant="ghost"
                             onClick={() => {
-                              const t = `${String(recoSancion.sancion ?? "")}. ${String(recoSancion.fundamento ?? "")} ${String(
+                              const titular = String(recoSancion.titular ?? recoSancion.sancion ?? "").trim();
+                              const t = `${titular}\n\n${String(recoSancion.fundamento ?? "")} ${String(
                                 recoSancion.proporcionalidad ?? "",
                               )}`.trim();
                               setForm((f) => ({ ...f, decision: t }));

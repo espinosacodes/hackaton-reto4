@@ -33,6 +33,14 @@ const SANCION_LABEL: Record<TipoSancion, string> = {
   absolucion: "Absolución / archivo",
 };
 
+// Frase directiva de una línea que nombra la sanción concreta.
+const SANCION_TITULAR: Record<TipoSancion, string> = {
+  llamado_atencion: "Debería aplicarse un llamado de atención escrito.",
+  suspension: "Debería aplicarse una suspensión del contrato (según la escala del RIT).",
+  terminacion_justa_causa: "Debería procederse a la terminación del contrato con justa causa.",
+  absolucion: "No debería aplicarse sanción: procede el archivo del proceso (absolución).",
+};
+
 // Heurística determinista para la demo sin proveedor de IA: gradúa la sanción
 // por la gravedad de los hechos (CST art. 62-A) y matiza con los descargos.
 function recomendacionDemo(b: Body) {
@@ -67,6 +75,7 @@ function recomendacionDemo(b: Body) {
 
   return {
     tipo,
+    titular: SANCION_TITULAR[tipo],
     sancion: SANCION_LABEL[tipo],
     fundamento: tieneRit
       ? "Aplique la escala de faltas y sanciones del RIT cargado en el Perfil y los arts. 62, 104 a 115 del CST. Cite el artículo/numeral específico del RIT que tipifica la conducta."
