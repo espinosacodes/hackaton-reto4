@@ -13,7 +13,7 @@
 // nada y la app no se rompe: el contrato ya quedó en la nómina del navegador).
 // ─────────────────────────────────────────────────────────────────────────
 
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
 const REGION =
   process.env.S3_REGION ||
@@ -126,4 +126,25 @@ export async function subirContratoS3(args: SubirContratoArgs): Promise<SubirCon
   );
 
   return { bucket: BUCKET, docKey, metaKey, region: REGION };
+}
+
+export interface DescargaContrato {
+  bytes: Uint8Array;
+  contentType: string;
+}
+
+/**
+ * Descarga el documento original de un contrato desde S3 por su clave.
+ * Valida que la clave viva bajo el prefijo de contratos (evita leer objetos
+ * arbitrarios del bucket aunque alguien manipule el parámetro).
+ */
+export async function descargarContratoS3(key: string): Promise<DescargaContrato> {
+  if (!s3Configurado()) throw new Error("S3 no está configurado.");
+  const k = (key || "").replace(/^\/+/, "");
+  if (!k.startsWith(`${PREFIX}/`) || k.includes("..")) {
+    throw new Error("Clave de objeto no permitida.");
+  }
+  const out = await s3().send(new GetObjectCommand({ Bucket: BUCKET, Key: k }));
+  const bytes = await out.Body!.transformToByteArray();
+  return { bytes, contentType: out.ContentType || "application/octet-stream" };
 }

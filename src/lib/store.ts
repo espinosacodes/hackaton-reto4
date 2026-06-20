@@ -164,6 +164,13 @@ export function addContratoConfirmado(c: Contrato) {
   write(CONTRATOS_KEY, [c, ...all.filter((x) => x.id !== c.id)]);
 }
 
+/** Actualiza campos de un contrato ya confirmado (p. ej. la clave S3 tras archivar). */
+export function updateContratoConfirmado(id: string, patch: Partial<Contrato>) {
+  const all = read<Contrato[]>(CONTRATOS_KEY, []);
+  if (!all.some((x) => x.id === id)) return;
+  write(CONTRATOS_KEY, all.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+}
+
 /** Elimina un contrato que un humano agregó (p. ej. cargado por error). */
 export function removeContratoConfirmado(id: string) {
   const all = read<Contrato[]>(CONTRATOS_KEY, []);

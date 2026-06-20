@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/AppShell";
 import { Card, CardHeader, Badge, Button, Progress } from "@/components/ui";
 import { Reveal } from "@/components/motion";
 import { DocumentSource } from "@/components/DocumentSource";
-import { addContratoConfirmado, removeContratoConfirmado, logAudit, useBusqueda, setBusqueda, useEmpresaActiva, useContratosConfirmados, getUsuarioActual } from "@/lib/store";
+import { addContratoConfirmado, removeContratoConfirmado, updateContratoConfirmado, logAudit, useBusqueda, setBusqueda, useEmpresaActiva, useContratosConfirmados, getUsuarioActual } from "@/lib/store";
 import { obligacionesEmpleador } from "@/lib/aportes";
 import { Contrato } from "@/lib/types";
 import { cop, fmtDate, norm } from "@/lib/utils";
@@ -128,6 +128,14 @@ export default function ContratosPage() {
       const j = await res.json().catch(() => ({}));
       if (j._modo === "s3") {
         setArchivado({ modo: "s3", detalle: `${j.bucket}/${j.docKey ?? j.metaKey}` });
+        // Si se subió el documento original, guardamos su clave en el contrato
+        // para poder DESCARGARLO luego desde S3 (el archivo real, no el generado).
+        if (j.docKey) {
+          updateContratoConfirmado(c.id, {
+            s3DocKey: String(j.docKey),
+            s3DocNombre: nombreFuente || archivo?.name || undefined,
+          });
+        }
         logAudit(
           "Contrato archivado en S3",
           `${c.empleado} (${c.id}) · ${empresa.nombre} · s3://${j.bucket}/${j.docKey ?? j.metaKey}`,
@@ -598,6 +606,20 @@ function imprimirContrato(c: Contrato) {
   w.print();
 }
 
+// Descarga el documento ORIGINAL del contrato desde S3 (el archivo que se subió),
+// vía la ruta del servidor que lo entrega como adjunto con su nombre original.
+function descargarOriginalS3(c: Contrato) {
+  if (!c.s3DocKey) return;
+  const nombre = c.s3DocNombre || c.s3DocKey.split("/").pop() || "contrato";
+  const url = `/api/contratos/download?key=${encodeURIComponent(c.s3DocKey)}&name=${encodeURIComponent(nombre)}`;
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = nombre;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
 function Row({ c, abierto, onToggle, onDelete }: { c: Contrato; abierto: boolean; onToggle: () => void; onDelete?: () => void }) {
   const [verDoc, setVerDoc] = useState(false);
   const confPct = Math.round((c.extraccionConfianza ?? 0) * 100);
@@ -688,8 +710,13 @@ function Row({ c, abierto, onToggle, onDelete }: { c: Contrato; abierto: boolean
                 <Button variant="secondary" onClick={() => setVerDoc((v) => !v)}>
                   {verDoc ? "Ocultar documento" : "Ver documento del contrato"}
                 </Button>
+                {c.s3DocKey ? (
+                  <Button variant="primary" onClick={() => descargarOriginalS3(c)}>
+                    <Cloud size={14} color="currentColor" variant="Bold" /> Descargar original
+                  </Button>
+                ) : null}
                 <Button variant="secondary" onClick={() => imprimirContrato(c)}>
-                  Descargar PDF
+                  {c.s3DocKey ? "Descargar (generado)" : "Descargar PDF"}
                 </Button>
                 {onDelete && (
                   <button
