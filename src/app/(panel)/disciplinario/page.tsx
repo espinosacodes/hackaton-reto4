@@ -41,6 +41,24 @@ import {
   DocumentDownload,
 } from "iconsax-react";
 
+// Marcador para que el cuerpo no rompa si aún no hay contrato (prerender estático
+// o el instante previo a que el cliente lea la empresa de localStorage).
+const TRAB_PLACEHOLDER = {
+  id: "",
+  empleado: "—",
+  documento: "",
+  cargo: "",
+  area: "",
+  tipo: "indefinido",
+  jornada: "completa",
+  horasSemana: 42,
+  salarioMensual: 0,
+  auxilioTransporte: false,
+  salarioIntegral: false,
+  fechaInicio: "2025-01-01",
+  estado: "activo",
+} as const;
+
 // Aviso jurídico por tipo de fuero / estabilidad reforzada (la causa #1 de nulidad del despido).
 const FUERO_AVISO: Record<string, string> = {
   maternidad:
@@ -66,7 +84,7 @@ export default function DisciplinarioPage() {
   const [trabajadorId, setTrabajadorId] = useState(
     CONTRATOS.find((c) => c.cargo.toLowerCase().includes("operario"))?.id ?? CONTRATOS[0]?.id ?? ""
   );
-  const trab = todos.find((c) => c.id === trabajadorId) ?? todos[0];
+  const trab = todos.find((c) => c.id === trabajadorId) ?? todos[0] ?? TRAB_PLACEHOLDER;
 
   const [etapa, setEtapa] = useState<EtapaDisciplinaria>("hechos");
   const info = etapaInfo(etapa);

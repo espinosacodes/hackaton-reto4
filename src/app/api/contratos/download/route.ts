@@ -4,12 +4,15 @@ import { descargarContratoS3, s3Configurado } from "@/lib/s3";
 // Node runtime: el SDK de AWS y los buffers binarios no corren en el edge.
 export const runtime = "nodejs";
 
-// Descarga el documento ORIGINAL de un contrato desde S3.
+// Descarga (o muestra) el documento ORIGINAL de un contrato desde S3.
 //   GET /api/contratos/download?key=contratos/<empresaId>/…&name=archivo.pdf
+//   &disposition=inline  → lo muestra en el navegador (p. ej. para previsualizar el PDF)
+//   &disposition=attachment (por defecto) → fuerza la descarga
 // La clave se valida en s3.ts (debe vivir bajo el prefijo de contratos).
 export async function GET(req: NextRequest) {
   const key = req.nextUrl.searchParams.get("key") ?? "";
   const name = req.nextUrl.searchParams.get("name") || key.split("/").pop() || "contrato";
+  const inline = req.nextUrl.searchParams.get("disposition") === "inline";
   if (!key) {
     return NextResponse.json({ error: "Falta el parámetro key." }, { status: 400 });
   }
@@ -23,7 +26,7 @@ export async function GET(req: NextRequest) {
     return new NextResponse(Buffer.from(bytes), {
       headers: {
         "Content-Type": contentType,
-        "Content-Disposition": `attachment; filename="${safe}"`,
+        "Content-Disposition": `${inline ? "inline" : "attachment"}; filename="${safe}"`,
         "Cache-Control": "private, no-store",
       },
     });

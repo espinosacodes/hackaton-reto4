@@ -606,22 +606,39 @@ function imprimirContrato(c: Contrato) {
   w.print();
 }
 
-// Descarga el documento ORIGINAL del contrato desde S3 (el archivo que se subió),
-// vía la ruta del servidor que lo entrega como adjunto con su nombre original.
+// Nombre original del documento archivado (cae a la clave si no se guardó).
+function nombreOriginal(c: Contrato): string {
+  return c.s3DocNombre || c.s3DocKey?.split("/").pop() || "contrato";
+}
+
+// URL del documento ORIGINAL en S3. inline=true → para verlo embebido (PDF);
+// inline=false → fuerza la descarga con su nombre original.
+function urlOriginalS3(c: Contrato, inline = false): string {
+  const params = new URLSearchParams({ key: c.s3DocKey ?? "", name: nombreOriginal(c) });
+  if (inline) params.set("disposition", "inline");
+  return `/api/contratos/download?${params.toString()}`;
+}
+
+// Descarga el documento ORIGINAL del contrato desde S3 (el archivo que se subió).
 function descargarOriginalS3(c: Contrato) {
   if (!c.s3DocKey) return;
-  const nombre = c.s3DocNombre || c.s3DocKey.split("/").pop() || "contrato";
-  const url = `/api/contratos/download?key=${encodeURIComponent(c.s3DocKey)}&name=${encodeURIComponent(nombre)}`;
   const a = document.createElement("a");
-  a.href = url;
-  a.download = nombre;
+  a.href = urlOriginalS3(c, false);
+  a.download = nombreOriginal(c);
   document.body.appendChild(a);
   a.click();
   a.remove();
 }
 
+// True si el documento original es un PDF (se puede previsualizar embebido).
+function esPdfOriginal(c: Contrato): boolean {
+  const n = nombreOriginal(c).toLowerCase();
+  return n.endsWith(".pdf");
+}
+
 function Row({ c, abierto, onToggle, onDelete }: { c: Contrato; abierto: boolean; onToggle: () => void; onDelete?: () => void }) {
   const [verDoc, setVerDoc] = useState(false);
+  const [verPdf, setVerPdf] = useState(false);
   const confPct = Math.round((c.extraccionConfianza ?? 0) * 100);
   const confColor = confPct >= 85 ? "var(--success)" : confPct >= 60 ? "var(--warning)" : "var(--red)";
   return (
@@ -704,20 +721,34 @@ function Row({ c, abierto, onToggle, onDelete }: { c: Contrato; abierto: boolean
             <Campo k="Fuente" v={c.fuente === "ia" ? "IA" : "Manual"} />
           </dl>
 
-          {c.texto?.trim() ? (
+          {c.s3DocKey || c.texto?.trim() ? (
             <>
               <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">
-                <Button variant="secondary" onClick={() => setVerDoc((v) => !v)}>
-                  {verDoc ? "Ocultar documento" : "Ver documento del contrato"}
-                </Button>
+                {/* Documento ORIGINAL archivado en S3 (el archivo que se subió). */}
                 {c.s3DocKey ? (
-                  <Button variant="primary" onClick={() => descargarOriginalS3(c)}>
-                    <Cloud size={14} color="currentColor" variant="Bold" /> Descargar original
-                  </Button>
+                  <>
+                    {esPdfOriginal(c) && (
+                      <Button variant="primary" onClick={() => setVerPdf((v) => !v)}>
+                        <Cloud size={14} color="currentColor" variant="Bold" />
+                        {verPdf ? "Ocultar PDF" : "Ver PDF subido"}
+                      </Button>
+                    )}
+                    <Button variant={esPdfOriginal(c) ? "secondary" : "primary"} onClick={() => descargarOriginalS3(c)}>
+                      <Cloud size={14} color="currentColor" variant="Bold" /> Descargar original
+                    </Button>
+                  </>
                 ) : null}
-                <Button variant="secondary" onClick={() => imprimirContrato(c)}>
-                  {c.s3DocKey ? "Descargar (generado)" : "Descargar PDF"}
-                </Button>
+                {/* Texto extraído + documento representativo generado. */}
+                {c.texto?.trim() ? (
+                  <>
+                    <Button variant="secondary" onClick={() => setVerDoc((v) => !v)}>
+                      {verDoc ? "Ocultar texto" : "Ver texto extraído"}
+                    </Button>
+                    <Button variant="secondary" onClick={() => imprimirContrato(c)}>
+                      {c.s3DocKey ? "Descargar (generado)" : "Descargar PDF"}
+                    </Button>
+                  </>
+                ) : null}
                 {onDelete && (
                   <button
                     type="button"
@@ -729,7 +760,24 @@ function Row({ c, abierto, onToggle, onDelete }: { c: Contrato; abierto: boolean
                   </button>
                 )}
               </div>
-              {verDoc && (
+              {/* Previsualización del PDF ORIGINAL subido (embebido desde S3). */}
+              {verPdf && c.s3DocKey && (
+                <div className="mt-2 hairline overflow-hidden bg-surface-2">
+                  <iframe
+                    src={urlOriginalS3(c, true)}
+                    title={`PDF — ${c.empleado}`}
+                    className="w-full"
+                    style={{ height: 520, border: "none" }}
+                  />
+                  <p className="px-4 py-2 text-[10px] leading-snug text-ink-3">
+                    Documento original subido, servido desde su almacenamiento en S3.{" "}
+                    <a href={urlOriginalS3(c, true)} target="_blank" rel="noopener noreferrer" className="underline hover:text-ink">
+                      Abrir en una pestaña nueva
+                    </a>
+                  </p>
+                </div>
+              )}
+              {verDoc && c.texto?.trim() && (
                 <div className="mt-2 max-h-80 overflow-y-auto hairline bg-surface-2 px-4 py-3">
                   <div className="whitespace-pre-wrap text-[11.5px] leading-relaxed text-ink-2">{c.texto}</div>
                   <p className="mt-2 text-[10px] leading-snug text-ink-3">Texto extraído del documento cargado.</p>
