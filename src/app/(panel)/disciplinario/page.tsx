@@ -120,6 +120,10 @@ export default function DisciplinarioPage() {
   const [sugiriendo, setSugiriendo] = useState(false);
   const [sugerencia, setSugerencia] = useState<Record<string, unknown> | null>(null);
 
+  // Recomendación de sanción con IA (etapa de decisión). Es apoyo: doble validación.
+  const [recomendandoSancion, setRecomendandoSancion] = useState(false);
+  const [recoSancion, setRecoSancion] = useState<Record<string, unknown> | null>(null);
+
   // Carga del documento de descargos anotado en la audiencia.
   const docInputRef = useRef<HTMLInputElement>(null);
   const [cargandoDoc, setCargandoDoc] = useState(false);
@@ -221,6 +225,52 @@ export default function DisciplinarioPage() {
       setSugerencia({ error: "No se pudo obtener la sugerencia." });
     } finally {
       setSugiriendo(false);
+    }
+  }
+
+  // IA: recomienda la sanción proporcional a partir del RIT, el CST, los descargos
+  // y las pruebas. Es una recomendación de apoyo; el abogado la valida dos veces.
+  const SANCION_TIPO_LABEL: Record<string, string> = {
+    llamado_atencion: "Llamado de atención escrito",
+    suspension: "Suspensión del contrato",
+    terminacion_justa_causa: "Terminación con justa causa",
+    absolucion: "Absolución / archivo",
+  };
+
+  async function recomendarSancionIA() {
+    setRecomendandoSancion(true);
+    setRecoSancion(null);
+    try {
+      const res = await fetch("/api/recomendar-sancion", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          hechos: form.hechos,
+          fechaHechos: form.fechaHechos,
+          cargo: trab.cargo,
+          empleado: trab.empleado,
+          causal: caso.causalTexto,
+          normaInterna: form.normaInterna,
+          descargos: form.preguntasRespuestas
+            ? [{ pregunta: "Descargos rendidos", respuesta: form.preguntasRespuestas }]
+            : [],
+          pruebas: [
+            form.pruebasAportadas === "si" ? "El trabajador aportó pruebas." : "",
+            form.pruebasAportadas === "no" ? "El trabajador no aportó pruebas." : "",
+            form.oportunidadPruebas,
+          ]
+            .filter(Boolean)
+            .join(" "),
+          documentos: docsPerfil.map((d) => ({ tipo: d.tipo, nombre: d.nombre, texto: d.texto })),
+        }),
+      });
+      const data = await res.json();
+      setRecoSancion(data);
+      logAudit("Recomendación de sanción (IA)", `${trab.empleado} · ${String(data.tipo ?? "—")}`);
+    } catch {
+      setRecoSancion({ error: "No se pudo obtener la recomendación." });
+    } finally {
+      setRecomendandoSancion(false);
     }
   }
 
@@ -742,9 +792,89 @@ export default function DisciplinarioPage() {
                       />
                     </Campo>
                     <p className="mt-2 text-[11px] leading-snug text-ink-3">
-                      La IA entrega su consideración (abajo); la decisión final la toma el abogado. Este texto alimenta la
-                      decisión motivada y la notificación.
+                      La decisión final la toma el abogado. Este texto alimenta la decisión motivada y la notificación.
                     </p>
+
+                    {/* Recomendación de sanción con IA — apoyo que se valida dos veces */}
+                    <div className="mt-3 rounded-md border border-[var(--hairline)] bg-surface p-3">
+                      <div className="mb-2 flex items-center gap-2">
+                        <Magicpen size={16} color="var(--red)" variant="Bold" />
+                        <span className="text-[13px] font-medium text-ink">Recomendación de sanción (IA)</span>
+                      </div>
+                      <p className="text-[11.5px] leading-snug text-ink-3">
+                        La IA pondera el RIT, el CST (arts. 62 y 104-125), los descargos rendidos y las pruebas para sugerir
+                        la sanción proporcional.
+                      </p>
+                      <Button variant="secondary" className="mt-2" onClick={recomendarSancionIA} disabled={recomendandoSancion}>
+                        <Magicpen size={15} color="currentColor" variant="Bold" />{" "}
+                        {recomendandoSancion ? "Analizando…" : "Recomendar sanción con IA"}
+                      </Button>
+
+                      {recoSancion && !recoSancion.error && (
+                        <div className="mt-3 space-y-2 text-[12.5px]">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge tone="warning">
+                              {SANCION_TIPO_LABEL[String(recoSancion.tipo ?? "")] ?? "Recomendación"}
+                            </Badge>
+                            <Badge tone={recoSancion._modo === "ia" ? "success" : "neutral"}>
+                              {recoSancion._modo === "ia" ? String(recoSancion._provider ?? "IA") : "Recomendación base (sin IA)"}
+                            </Badge>
+                          </div>
+                          {String(recoSancion.sancion ?? "") && (
+                            <p className="text-ink-2">
+                              <span className="font-medium text-ink">Sanción sugerida: </span>
+                              {String(recoSancion.sancion)}
+                            </p>
+                          )}
+                          {String(recoSancion.fundamento ?? "") && (
+                            <p className="text-ink-2">
+                              <span className="font-medium text-ink">Fundamento: </span>
+                              {String(recoSancion.fundamento)}
+                            </p>
+                          )}
+                          {String(recoSancion.proporcionalidad ?? "") && (
+                            <p className="text-ink-2">
+                              <span className="font-medium text-ink">Proporcionalidad: </span>
+                              {String(recoSancion.proporcionalidad)}
+                            </p>
+                          )}
+                          {Array.isArray(recoSancion.alternativas) && (recoSancion.alternativas as string[]).length > 0 && (
+                            <p className="text-ink-3">
+                              Otras medidas posibles: {(recoSancion.alternativas as string[]).join(" · ")}
+                            </p>
+                          )}
+                          {recoSancion._modo === "error" && (
+                            <p className="text-[11.5px] text-red-dark">
+                              La IA falló; mostrando recomendación base. {String(recoSancion._warning ?? "")}
+                            </p>
+                          )}
+
+                          <div className="flex items-start gap-1.5 rounded bg-[var(--red-tint)] px-2.5 py-2 text-[11px] leading-snug text-red-dark">
+                            <Warning2 size={14} color="currentColor" variant="Bold" className="mt-px shrink-0" />
+                            <span>
+                              Es una <strong>recomendación de la IA</strong>, no una decisión. Valídela <strong>dos veces</strong>:
+                              contraste el fundamento con el RIT y el CST, y confirme que las pruebas y los descargos la
+                              sustentan antes de adoptarla.
+                            </span>
+                          </div>
+
+                          <Button
+                            variant="ghost"
+                            onClick={() => {
+                              const t = `${String(recoSancion.sancion ?? "")}. ${String(recoSancion.fundamento ?? "")} ${String(
+                                recoSancion.proporcionalidad ?? "",
+                              )}`.trim();
+                              setForm((f) => ({ ...f, decision: t }));
+                            }}
+                          >
+                            <TickCircle size={15} color="currentColor" /> Usar como borrador de decisión
+                          </Button>
+                        </div>
+                      )}
+                      {Boolean(recoSancion?.error) && (
+                        <p className="mt-2 text-[12px] text-red-dark">{String(recoSancion?.error)}</p>
+                      )}
+                    </div>
                   </div>
                 )}
 
