@@ -341,7 +341,7 @@ export interface LiquidacionRegistrada {
   salarioMensual: number; // base del "día de salario" (CST art. 65)
   causaLabel: string;
   ts: string; // fecha de registro (ISO)
-  estado: "pendiente" | "pagada";
+  estado: "pendiente" | "pagada" | "anulada"; // anulada = revertida, el trabajador vuelve a activos
   fechaPago?: string; // congela la mora al pagar
 }
 
@@ -356,6 +356,12 @@ export function marcarLiquidacionPagada(id: string, fechaPago: string) {
     LIQ_REG_KEY,
     all.map((x) => (x.id === id ? { ...x, estado: "pagada" as const, fechaPago } : x))
   );
+}
+
+// Anula la liquidación: el trabajador vuelve a los contratos activos y se detiene la mora.
+export function anularLiquidacion(id: string) {
+  const all = read<LiquidacionRegistrada[]>(LIQ_REG_KEY, []);
+  write(LIQ_REG_KEY, all.map((x) => (x.id === id ? { ...x, estado: "anulada" as const } : x)));
 }
 
 export function removeLiquidacionRegistrada(id: string) {

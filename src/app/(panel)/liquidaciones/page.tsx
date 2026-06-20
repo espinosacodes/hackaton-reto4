@@ -14,6 +14,7 @@ import {
   useLiquidacionesRegistradas,
   addLiquidacionRegistrada,
   marcarLiquidacionPagada,
+  anularLiquidacion,
   removeLiquidacionRegistrada,
 } from "@/lib/store";
 import { CausaTerminacion, LiquidacionResultado, type Contrato } from "@/lib/types";
@@ -62,11 +63,17 @@ export default function LiquidacionesPage() {
 
   const confirmados = useContratosConfirmados();
   const params = useParametros();
+  const registradas = useLiquidacionesRegistradas();
+  // Un contrato con liquidación registrada (no anulada) sale de los CONTRATOS ACTIVOS.
+  const liquidadosIds = useMemo(
+    () => new Set(registradas.filter((r) => r.estado !== "anulada").map((r) => r.contratoId)),
+    [registradas]
+  );
   const todos = useMemo(() => [...confirmados, ...CONTRATOS], [confirmados, CONTRATOS]);
-  // Si todavía no hay contratos (empresa nueva o sin extracciones confirmadas),
-  // usamos un marcador para que los cálculos no rompan; abajo se muestra el empty state.
+  const activos = useMemo(() => todos.filter((c) => !liquidadosIds.has(c.id)), [todos, liquidadosIds]);
+  // Empty state sólo si no hay contratos en absoluto.
   const sinContratos = todos.length === 0;
-  const contrato = todos.find((c) => c.id === id) ?? todos[0] ?? CONTRATO_PLACEHOLDER;
+  const contrato = activos.find((c) => c.id === id) ?? activos[0] ?? CONTRATO_PLACEHOLDER;
 
   // Pasivo acumulado: desde cuándo se adeuda (por defecto, el inicio del contrato).
   const desdeAcum = maxFechaStr(contrato.fechaInicio, desdeDeuda || contrato.fechaInicio);
@@ -121,8 +128,18 @@ export default function LiquidacionesPage() {
     pagado.trim() !== "" ? compararLiquidacion(liq.total, Number(pagado.replace(/\D/g, ""))) : null;
 
   // Registro de liquidaciones para seguimiento de la sanción moratoria (CST art. 65).
-  const registradas = useLiquidacionesRegistradas();
   function registrar() {
+    if (!contrato.id) return;
+    if (
+      typeof window !== "undefined" &&
+      !window.confirm(
+        `¿Registrar la liquidación de ${contrato.empleado}?\n\n` +
+          "Al confirmar, el trabajador SALDRÁ de los contratos activos (se considera liquidado) y, " +
+          "desde la fecha de retiro, empezará a contar la sanción por mora (art. 65 CST) hasta que la marques como pagada. " +
+          "Podrás anularla después para devolverlo a activos."
+      )
+    )
+      return;
     addLiquidacionRegistrada({
       id: `${contrato.id}-${hasta}`,
       contratoId: contrato.id,
@@ -178,17 +195,21 @@ export default function LiquidacionesPage() {
             <div className="space-y-4 px-5 py-4">
               <Field label="Empleado / contrato">
                 <select
-                  value={id}
+                  value={contrato.id}
                   onChange={(e) => setId(e.target.value)}
                   className="input"
                 >
-                  {todos.map((c) => (
+                  {activos.length === 0 && <option value="">— sin contratos activos —</option>}
+                  {activos.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.empleado} — {c.id}
                       {c.id.startsWith("C-IA") ? " · validado IA" : ""}
                     </option>
                   ))}
                 </select>
+                <p className="mt-1 text-[11px] text-ink-3">
+                  Los contratos con liquidación registrada salen de esta lista (abajo puedes anularlos).
+                </p>
               </Field>
               <Field label="Causa de terminación">
                 <select
@@ -337,10 +358,11 @@ export default function LiquidacionesPage() {
                           <span className="font-num text-ink">{cop(r.total)}</span>
                           <button
                             onClick={() => setNovedades((prev) => prev.filter((x) => x.id !== n.id))}
-                            className="text-ink-3 hover:text-red"
-                            aria-label="Quitar"
+                            className="inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-red-dark transition-colors hover:bg-[var(--red-tint)]"
+                            title="Quitar esta hora extra"
+                            aria-label="Quitar esta hora extra"
                           >
-                            <CloseCircle size={14} />
+                            <CloseCircle size={15} /> Quitar
                           </button>
                         </div>
                       );
@@ -487,10 +509,14 @@ export default function LiquidacionesPage() {
             </div>
             <div className="divide-y divide-border">
               {registradas.map((r) => {
+                const anulada = r.estado === "anulada";
                 const hastaCalc = r.estado === "pagada" ? r.fechaPago ?? HOY : HOY;
-                const s = sancionMoratoriaArt65(r.salarioMensual, r.fechaRetiro, hastaCalc);
+                const s = anulada ? null : sancionMoratoriaArt65(r.salarioMensual, r.fechaRetiro, hastaCalc);
                 return (
-                  <div key={r.id} className="grid grid-cols-12 items-center gap-2 px-5 py-2.5 text-[12.5px]">
+                  <div
+                    key={r.id}
+                    className={`grid grid-cols-12 items-center gap-2 px-5 py-2.5 text-[12.5px] ${anulada ? "opacity-60" : ""}`}
+                  >
                     <div className="col-span-3 min-w-0">
                       <div className="truncate font-medium text-ink">{r.empleado}</div>
                       <div className="truncate text-[10.5px] text-ink-3">{r.causaLabel}</div>
@@ -498,18 +524,26 @@ export default function LiquidacionesPage() {
                     <div className="col-span-2 text-ink-2">{fmtDate(r.fechaRetiro)}</div>
                     <div className="col-span-2 text-right font-num text-ink-2">{cop(r.total)}</div>
                     <div className="col-span-2 text-right">
-                      <span
-                        className="font-num"
-                        style={{ color: r.estado === "pendiente" && s.valor > 0 ? "var(--red)" : "var(--ink-3)" }}
-                      >
-                        {cop(s.valor)}
-                      </span>
-                      <div className="text-[10px] text-ink-3">
-                        {s.diasMora} días{s.topeAlcanzado ? " · tope 24m + interés" : ""}
-                      </div>
+                      {s ? (
+                        <>
+                          <span
+                            className="font-num"
+                            style={{ color: r.estado === "pendiente" && s.valor > 0 ? "var(--red)" : "var(--ink-3)" }}
+                          >
+                            {cop(s.valor)}
+                          </span>
+                          <div className="text-[10px] text-ink-3">
+                            {s.diasMora} días{s.topeAlcanzado ? " · tope 24m + interés" : ""}
+                          </div>
+                        </>
+                      ) : (
+                        <span className="text-ink-3">—</span>
+                      )}
                     </div>
                     <div className="col-span-3 flex items-center justify-end gap-2">
-                      {r.estado === "pagada" ? (
+                      {anulada ? (
+                        <Badge tone="neutral">Anulada</Badge>
+                      ) : r.estado === "pagada" ? (
                         <Badge tone="success">Pagada{r.fechaPago ? ` · ${fmtDate(r.fechaPago)}` : ""}</Badge>
                       ) : (
                         <Button
@@ -522,10 +556,29 @@ export default function LiquidacionesPage() {
                           Marcar pagada
                         </Button>
                       )}
+                      {!anulada && (
+                        <button
+                          onClick={() => {
+                            if (
+                              typeof window !== "undefined" &&
+                              !window.confirm(
+                                `¿Anular la liquidación de ${r.empleado}? El trabajador volverá a los contratos activos y se detiene la sanción por mora.`
+                              )
+                            )
+                              return;
+                            anularLiquidacion(r.id);
+                            logAudit("Liquidación anulada", `${r.empleado} (${r.contratoId})`);
+                          }}
+                          className="text-[11px] text-ink-3 underline hover:text-red"
+                        >
+                          Anular
+                        </button>
+                      )}
                       <button
                         onClick={() => removeLiquidacionRegistrada(r.id)}
                         className="text-ink-3 hover:text-red"
-                        aria-label="Quitar"
+                        aria-label="Quitar del historial"
+                        title="Quitar del historial"
                       >
                         <CloseCircle size={14} />
                       </button>

@@ -7,7 +7,7 @@ import { Card, CardHeader, Badge, Button } from "@/components/ui";
 import { Reveal } from "@/components/motion";
 import { HOY } from "@/lib/data/contratos";
 import { useContratosConfirmados, useParametros, useNitEmpresa, useEmpresaActiva, logAudit } from "@/lib/store";
-import { calcularAportes, compararAporte, type ClaseRiesgo, type EstadoAporte } from "@/lib/aportes";
+import { calcularAportes, compararAporte, sugerirClaseRiesgo, CLASES_RIESGO, type ClaseRiesgo, type EstadoAporte } from "@/lib/aportes";
 import { ACCEPTED_FILE_TYPES, extractTextFromFile, FileExtractError } from "@/lib/extract-file";
 import { cop, fmtDate, daysBetween } from "@/lib/utils";
 import { ShieldTick, DocumentUpload, Document, Flash, Cpu, InfoCircle, Calculator, TickCircle, Warning2, Calendar } from "iconsax-react";
@@ -110,10 +110,19 @@ export default function AportesPage() {
     [confirmados, CONTRATOS]
   );
   const aportes = useMemo(
-    () => trabajadores.map((c) => calcularAportes(c, params, clasePorId[c.id] ?? "I")),
+    // Clase ARL: la editada (override) o, si no, la sugerida por el cargo (Decreto 768/2022).
+    () => trabajadores.map((c) => calcularAportes(c, params, clasePorId[c.id] ?? sugerirClaseRiesgo(c.cargo).clase)),
     [trabajadores, params, clasePorId]
   );
-  const onClase = (id: string, cl: ClaseRiesgo) => setClasePorId((prev) => ({ ...prev, [id]: cl }));
+  const onClase = (id: string, cl: ClaseRiesgo | null) =>
+    setClasePorId((prev) => {
+      if (cl === null) {
+        const n = { ...prev };
+        delete n[id];
+        return n;
+      }
+      return { ...prev, [id]: cl };
+    });
 
   const calendario = useMemo(
     () => OBLIGACIONES.map((o) => ({ ...o, ...proximaObligacion(o.md, HOY) })).sort((a, b) => a.dias - b.dias),
@@ -235,6 +244,65 @@ export default function AportesPage() {
   );
 }
 
+function claseTone(cl: ClaseRiesgo): "success" | "neutral" | "warning" | "red" {
+  return cl === "I" ? "success" : cl === "II" ? "neutral" : cl === "III" ? "warning" : "red";
+}
+
+// Clase de riesgo ARL: muestra la SUGERIDA por el cargo (Decreto 768/2022) y permite
+// editarla si el caso lo requiere; "sug." la devuelve a la sugerida.
+function ClaseArlCell({
+  cargo,
+  override,
+  onChange,
+}: {
+  cargo: string;
+  override?: ClaseRiesgo;
+  onChange: (cl: ClaseRiesgo | null) => void;
+}) {
+  const [editando, setEditando] = useState(false);
+  const sug = sugerirClaseRiesgo(cargo);
+  const clase = override ?? sug.clase;
+  const editado = override != null && override !== sug.clase;
+
+  if (editando) {
+    return (
+      <div className="flex items-center gap-1">
+        <select
+          value={clase}
+          onChange={(e) => onChange(e.target.value as ClaseRiesgo)}
+          className="ap-input w-auto py-1 text-[11.5px]"
+          autoFocus
+        >
+          {CLASES_RIESGO.map((cl) => (
+            <option key={cl} value={cl}>{cl}</option>
+          ))}
+        </select>
+        <button
+          onClick={() => { onChange(null); setEditando(false); }}
+          className="text-[10px] text-ink-3 underline hover:text-ink"
+          title="Volver a la clase sugerida por el cargo"
+        >
+          sug.
+        </button>
+        <button onClick={() => setEditando(false)} className="text-ink-3 hover:text-ink" title="Listo" aria-label="Listo">
+          <TickCircle size={13} />
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col items-start gap-0.5" title={`${sug.motivo}${editado ? " · Editada manualmente." : ""}`}>
+      <div className="flex items-center gap-1">
+        <Badge tone={claseTone(clase)}>Clase {clase}</Badge>
+        {editado && <span className="text-[9px] uppercase tracking-wide text-ink-3">ed.</span>}
+      </div>
+      <button onClick={() => setEditando(true)} className="text-[9.5px] text-ink-3 underline hover:text-red" title="Editar la clase de riesgo">
+        editar
+      </button>
+    </div>
+  );
+}
+
 // ── Modo 1: solo cálculo ─────────────────────────────────────────────────────
 function ModoMotor({
   aportes,
@@ -243,7 +311,7 @@ function ModoMotor({
 }: {
   aportes: ReturnType<typeof calcularAportes>[];
   clasePorId: Record<string, ClaseRiesgo>;
-  onClase: (id: string, cl: ClaseRiesgo) => void;
+  onClase: (id: string, cl: ClaseRiesgo | null) => void;
 }) {
   const [sel, setSel] = useState(0);
   const totSS = aportes.reduce((s, a) => s + a.totalSeguridadSocial, 0);
@@ -272,16 +340,11 @@ function ModoMotor({
                   {a.empleado}
                 </button>
                 <div className="col-span-2">
-                  <select
-                    value={clasePorId[a.contratoId] ?? "I"}
-                    onChange={(e) => onClase(a.contratoId, e.target.value as ClaseRiesgo)}
-                    className="ap-input w-auto py-1 text-[11.5px]"
-                    title="Clase de riesgo ARL de este cargo"
-                  >
-                    {(["I", "II", "III", "IV", "V"] as ClaseRiesgo[]).map((cl) => (
-                      <option key={cl} value={cl}>{cl}</option>
-                    ))}
-                  </select>
+                  <ClaseArlCell
+                    cargo={a.cargo}
+                    override={clasePorId[a.contratoId]}
+                    onChange={(cl) => onClase(a.contratoId, cl)}
+                  />
                 </div>
                 <div className="col-span-2 text-right font-num text-ink-2">{cop(a.ibc)}</div>
                 <div className="col-span-2 text-right font-num text-ink">{cop(a.totalSeguridadSocial)}</div>

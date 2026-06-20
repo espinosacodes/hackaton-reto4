@@ -36,10 +36,40 @@ export interface LineaAporte {
 export interface AportesContrato {
   contratoId: string;
   empleado: string;
+  cargo: string; // para sugerir la clase de riesgo ARL por el oficio
   ibc: number; // base de cotización a seguridad social
   lineas: LineaAporte[];
   totalSeguridadSocial: number; // lo que va por PILA cada mes
   totalProvisiones: number; // provisiones mensuales (cesantías, prima, vacaciones)
+}
+
+// ── Clasificación de riesgo ARL (Decreto 768/2022) ───────────────────────────
+export const CLASES_RIESGO: ClaseRiesgo[] = ["I", "II", "III", "IV", "V"];
+
+// Sugiere la clase de riesgo ARL a partir del CARGO/OFICIO del trabajador, conforme
+// a los niveles de la Tabla de Clasificación de Actividades Económicas del SGRL
+// (Decreto 768 de 2022). La actividad económica de la empresa es la base legal; el
+// cargo refina el nivel. Es una sugerencia editable: la clasificación final la valida
+// el área de SST / la ARL.
+const RIESGO_KEYWORDS: { clase: ClaseRiesgo; claves: string[] }[] = [
+  { clase: "V", claves: ["construc", "obra", "andamio", "altura", "miner", "explosiv", "demolici", "asbesto", "alta tensi", "bombero", "soldador", "estructura met"] },
+  { clase: "IV", claves: ["mecánic", "mecanic", "metalmec", "fundici", "maquinaria pesada", "tractomula", "carga pesada", "torno", "prensa", "planta de produc"] },
+  { clase: "III", claves: ["operario", "operador", "bodega", "almacen", "montacarga", "mantenimiento", "conductor", "repart", "domicili", "aseo", "manipulaci", "cocina", "producci", "soldadura"] },
+  { clase: "II", claves: ["vendedor", "ventas", "cajero", "comercial", "mensajer", "peluquer", "estilista", "instalador", "técnico de campo", "tecnico de campo", "mercaderista"] },
+  // Clase I (mínimo) = administrativo / oficina → valor por defecto.
+];
+
+export function sugerirClaseRiesgo(cargo: string): { clase: ClaseRiesgo; motivo: string } {
+  const c = (cargo || "").toLowerCase();
+  for (const r of RIESGO_KEYWORDS) {
+    if (r.claves.some((k) => c.includes(k))) {
+      return { clase: r.clase, motivo: `Clase ${r.clase} sugerida por el cargo «${cargo}» (Decreto 768/2022).` };
+    }
+  }
+  return {
+    clase: "I",
+    motivo: `Clase I (mínimo) por defecto para labor administrativa / de oficina. Verifique contra la actividad económica de la empresa (Decreto 768/2022).`,
+  };
 }
 
 const round = (n: number) => Math.round(n);
@@ -93,7 +123,7 @@ export function calcularAportes(
   const totalSeguridadSocial = lineas.filter((l) => l.grupo === "seguridad_social").reduce((s, l) => s + l.valor, 0);
   const totalProvisiones = lineas.filter((l) => l.grupo === "provision").reduce((s, l) => s + l.valor, 0);
 
-  return { contratoId: c.id, empleado: c.empleado, ibc: round(ibc), lineas, totalSeguridadSocial, totalProvisiones };
+  return { contratoId: c.id, empleado: c.empleado, cargo: c.cargo, ibc: round(ibc), lineas, totalSeguridadSocial, totalProvisiones };
 }
 
 /**
