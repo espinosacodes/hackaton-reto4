@@ -5,11 +5,11 @@ import { PageHeader } from "@/components/AppShell";
 import { Card, CardHeader, Badge, Button, Progress } from "@/components/ui";
 import { Reveal } from "@/components/motion";
 import { DocumentSource } from "@/components/DocumentSource";
-import { addContratoConfirmado, removeContratoConfirmado, logAudit, useBusqueda, setBusqueda, useEmpresaActiva, useContratosConfirmados } from "@/lib/store";
+import { addContratoConfirmado, removeContratoConfirmado, updateContratoConfirmado, logAudit, useBusqueda, setBusqueda, useEmpresaActiva, useContratosConfirmados, getUsuarioActual } from "@/lib/store";
 import { obligacionesEmpleador } from "@/lib/aportes";
 import { Contrato } from "@/lib/types";
 import { cop, fmtDate, norm } from "@/lib/utils";
-import { DocumentUpload, Flash, TickCircle, People, Cpu, Warning2, ArrowDown2, Trash, CloseCircle, AddCircle } from "iconsax-react";
+import { DocumentUpload, Flash, TickCircle, People, Cpu, Warning2, ArrowDown2, Trash, CloseCircle, AddCircle, Cloud } from "iconsax-react";
 
 const tipoLabel: Record<string, string> = {
   indefinido: "Indefinido",
@@ -44,6 +44,11 @@ export default function ContratosPage() {
   const [extraccion, setExtraccion] = useState<Record<string, unknown> | null>(null);
   const [leyendo, setLeyendo] = useState(false);
   const [expandido, setExpandido] = useState<string | null>(null);
+  // Documento original cargado (para archivarlo en S3 al confirmar) y su nombre.
+  const [archivo, setArchivo] = useState<File | null>(null);
+  const [nombreFuente, setNombreFuente] = useState<string>("");
+  // Estado del archivado en la nube (S3) tras confirmar.
+  const [archivado, setArchivado] = useState<{ modo: string; detalle: string } | null>(null);
 
   // Revisión humana: copia editable de lo extraído + estado de validación.
   // Al llegar una nueva extracción reseteamos en render (patrón recomendado por React).
@@ -97,6 +102,54 @@ export default function ContratosPage() {
     setObligaciones(Array.from(new Set([...obligaciones, ...sug])));
   }
 
+  // Archiva el contrato validado en S3, bajo la carpeta de la empresa activa.
+  // Sube el documento original (si lo hay) y un sidecar JSON con los datos validados.
+  async function archivarEnS3(c: Contrato) {
+    if (!empresa) return;
+    const ts = new Date().toISOString();
+    const fd = new FormData();
+    fd.append("empresaId", empresa.id);
+    fd.append("ts", ts);
+    fd.append(
+      "meta",
+      JSON.stringify({
+        empresaId: empresa.id,
+        empresaNombre: empresa.nombre,
+        ts,
+        contrato: c,
+        textoContrato: texto || undefined,
+        validadoPor: getUsuarioActual()?.email ?? "RH (demo)",
+      }),
+    );
+    if (archivo) fd.append("file", archivo, nombreFuente || archivo.name);
+    else if (nombreFuente) fd.append("nombreArchivo", nombreFuente);
+    try {
+      const res = await fetch("/api/contratos/upload", { method: "POST", body: fd });
+      const j = await res.json().catch(() => ({}));
+      if (j._modo === "s3") {
+        setArchivado({ modo: "s3", detalle: `${j.bucket}/${j.docKey ?? j.metaKey}` });
+        // Si se subió el documento original, guardamos su clave en el contrato
+        // para poder DESCARGARLO luego desde S3 (el archivo real, no el generado).
+        if (j.docKey) {
+          updateContratoConfirmado(c.id, {
+            s3DocKey: String(j.docKey),
+            s3DocNombre: nombreFuente || archivo?.name || undefined,
+          });
+        }
+        logAudit(
+          "Contrato archivado en S3",
+          `${c.empleado} (${c.id}) · ${empresa.nombre} · s3://${j.bucket}/${j.docKey ?? j.metaKey}`,
+        );
+      } else if (j._modo === "demo") {
+        setArchivado({ modo: "demo", detalle: String(j.mensaje ?? "S3 no configurado.") });
+      } else {
+        setArchivado({ modo: "error", detalle: String(j.error ?? "No se pudo archivar en S3.") });
+      }
+    } catch {
+      setArchivado({ modo: "error", detalle: "No se pudo conectar con el servidor para archivar en S3." });
+    }
+  }
+
   function confirmar() {
     const d = datos ?? extraccion;
     if (!d) return;
@@ -126,6 +179,9 @@ export default function ContratosPage() {
     );
     setConfirmado(new Date().toLocaleString("es-CO"));
     setEditando(false);
+    // Archivar en la nube de la empresa (S3). No bloquea la confirmación.
+    setArchivado(null);
+    void archivarEnS3(nuevo);
   }
 
   function eliminarContrato(c: Contrato) {
@@ -183,9 +239,12 @@ export default function ContratosPage() {
           <div className="px-5 py-4">
             {/* Origen del documento: archivo local o bucket propio de la empresa */}
             <DocumentSource
-              onText={(t) => {
+              onText={(t, fuente, file) => {
                 setTexto(t);
                 setExtraccion(null);
+                setArchivo(file ?? null);
+                setNombreFuente(fuente ?? "");
+                setArchivado(null);
               }}
               onBusyChange={setLeyendo}
             />
@@ -203,7 +262,7 @@ export default function ContratosPage() {
                 Probar con un contrato de ejemplo
               </button>
               <Button variant="primary" onClick={extraer} disabled={cargando || leyendo || !texto.trim()}>
-                <Flash size={15} variant="Bold" />
+                <Flash size={15} color="currentColor" variant="Bold" />
                 {cargando ? "Analizando…" : "Extraer con IA"}
               </Button>
             </div>
@@ -360,12 +419,53 @@ export default function ContratosPage() {
                   </div>
                 ) : null}
                 {confirmado ? (
-                  <div className="hairline flex items-start gap-2 bg-[var(--success-tint)] px-3 py-2.5 text-[12.5px]">
-                    <TickCircle size={16} color="var(--success)" variant="Bold" className="mt-0.5 shrink-0" />
-                    <span className="text-ink">
-                      <span className="font-medium">Validado por RH (demo)</span> el {confirmado}. Registrado en la
-                      bitácora y disponible en Liquidaciones y Reclasificación.
-                    </span>
+                  <div className="space-y-2">
+                    <div className="hairline flex items-start gap-2 bg-[var(--success-tint)] px-3 py-2.5 text-[12.5px]">
+                      <TickCircle size={16} color="var(--success)" variant="Bold" className="mt-0.5 shrink-0" />
+                      <span className="text-ink">
+                        <span className="font-medium">Validado por RH (demo)</span> el {confirmado}. Registrado en la
+                        bitácora y disponible en Liquidaciones y Reclasificación.
+                      </span>
+                    </div>
+                    {archivado && (
+                      <div
+                        className="hairline flex items-start gap-2 px-3 py-2.5 text-[12px]"
+                        style={{
+                          background:
+                            archivado.modo === "s3"
+                              ? "var(--success-tint)"
+                              : archivado.modo === "error"
+                              ? "var(--red-tint)"
+                              : "var(--surface-2)",
+                        }}
+                      >
+                        <Cloud
+                          size={15}
+                          variant="Bold"
+                          color={archivado.modo === "error" ? "var(--red)" : "var(--success)"}
+                          className="mt-0.5 shrink-0"
+                        />
+                        <span className="text-ink-2">
+                          {archivado.modo === "s3" ? (
+                            <>
+                              <span className="font-medium text-ink">Archivado en S3</span> (empresa{" "}
+                              {empresa?.nombre}):{" "}
+                              <span className="break-all font-mono text-[11px]">{archivado.detalle}</span>
+                            </>
+                          ) : archivado.modo === "demo" ? (
+                            <>
+                              <span className="font-medium text-ink">Sin archivar en la nube.</span>{" "}
+                              {archivado.detalle}
+                            </>
+                          ) : (
+                            <>
+                              <span className="font-medium text-red-dark">No se pudo archivar en S3.</span>{" "}
+                              {archivado.detalle}
+                            </>
+                          )}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="flex gap-2 pt-1">
@@ -381,7 +481,7 @@ export default function ContratosPage() {
                       {editando ? "Listo" : "Corregir"}
                     </Button>
                     <Button variant="primary" className="flex-1" onClick={confirmar}>
-                      <TickCircle size={15} variant="Bold" /> Confirmar
+                      <TickCircle size={15} color="currentColor" variant="Bold" /> Confirmar
                     </Button>
                   </div>
                 )}
@@ -506,8 +606,39 @@ function imprimirContrato(c: Contrato) {
   w.print();
 }
 
+// Nombre original del documento archivado (cae a la clave si no se guardó).
+function nombreOriginal(c: Contrato): string {
+  return c.s3DocNombre || c.s3DocKey?.split("/").pop() || "contrato";
+}
+
+// URL del documento ORIGINAL en S3. inline=true → para verlo embebido (PDF);
+// inline=false → fuerza la descarga con su nombre original.
+function urlOriginalS3(c: Contrato, inline = false): string {
+  const params = new URLSearchParams({ key: c.s3DocKey ?? "", name: nombreOriginal(c) });
+  if (inline) params.set("disposition", "inline");
+  return `/api/contratos/download?${params.toString()}`;
+}
+
+// Descarga el documento ORIGINAL del contrato desde S3 (el archivo que se subió).
+function descargarOriginalS3(c: Contrato) {
+  if (!c.s3DocKey) return;
+  const a = document.createElement("a");
+  a.href = urlOriginalS3(c, false);
+  a.download = nombreOriginal(c);
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+// True si el documento original es un PDF (se puede previsualizar embebido).
+function esPdfOriginal(c: Contrato): boolean {
+  const n = nombreOriginal(c).toLowerCase();
+  return n.endsWith(".pdf");
+}
+
 function Row({ c, abierto, onToggle, onDelete }: { c: Contrato; abierto: boolean; onToggle: () => void; onDelete?: () => void }) {
   const [verDoc, setVerDoc] = useState(false);
+  const [verPdf, setVerPdf] = useState(false);
   const confPct = Math.round((c.extraccionConfianza ?? 0) * 100);
   const confColor = confPct >= 85 ? "var(--success)" : confPct >= 60 ? "var(--warning)" : "var(--red)";
   return (
@@ -590,15 +721,34 @@ function Row({ c, abierto, onToggle, onDelete }: { c: Contrato; abierto: boolean
             <Campo k="Fuente" v={c.fuente === "ia" ? "IA" : "Manual"} />
           </dl>
 
-          {c.texto?.trim() ? (
+          {c.s3DocKey || c.texto?.trim() ? (
             <>
               <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">
-                <Button variant="secondary" onClick={() => setVerDoc((v) => !v)}>
-                  {verDoc ? "Ocultar documento" : "Ver documento del contrato"}
-                </Button>
-                <Button variant="secondary" onClick={() => imprimirContrato(c)}>
-                  Descargar PDF
-                </Button>
+                {/* Documento ORIGINAL archivado en S3 (el archivo que se subió). */}
+                {c.s3DocKey ? (
+                  <>
+                    {esPdfOriginal(c) && (
+                      <Button variant="primary" onClick={() => setVerPdf((v) => !v)}>
+                        <Cloud size={14} color="currentColor" variant="Bold" />
+                        {verPdf ? "Ocultar PDF" : "Ver PDF subido"}
+                      </Button>
+                    )}
+                    <Button variant={esPdfOriginal(c) ? "secondary" : "primary"} onClick={() => descargarOriginalS3(c)}>
+                      <Cloud size={14} color="currentColor" variant="Bold" /> Descargar original
+                    </Button>
+                  </>
+                ) : null}
+                {/* Texto extraído + documento representativo generado. */}
+                {c.texto?.trim() ? (
+                  <>
+                    <Button variant="secondary" onClick={() => setVerDoc((v) => !v)}>
+                      {verDoc ? "Ocultar texto" : "Ver texto extraído"}
+                    </Button>
+                    <Button variant="secondary" onClick={() => imprimirContrato(c)}>
+                      {c.s3DocKey ? "Descargar (generado)" : "Descargar PDF"}
+                    </Button>
+                  </>
+                ) : null}
                 {onDelete && (
                   <button
                     type="button"
@@ -610,7 +760,24 @@ function Row({ c, abierto, onToggle, onDelete }: { c: Contrato; abierto: boolean
                   </button>
                 )}
               </div>
-              {verDoc && (
+              {/* Previsualización del PDF ORIGINAL subido (embebido desde S3). */}
+              {verPdf && c.s3DocKey && (
+                <div className="mt-2 hairline overflow-hidden bg-surface-2">
+                  <iframe
+                    src={urlOriginalS3(c, true)}
+                    title={`PDF — ${c.empleado}`}
+                    className="w-full"
+                    style={{ height: 520, border: "none" }}
+                  />
+                  <p className="px-4 py-2 text-[10px] leading-snug text-ink-3">
+                    Documento original subido, servido desde su almacenamiento en S3.{" "}
+                    <a href={urlOriginalS3(c, true)} target="_blank" rel="noopener noreferrer" className="underline hover:text-ink">
+                      Abrir en una pestaña nueva
+                    </a>
+                  </p>
+                </div>
+              )}
+              {verDoc && c.texto?.trim() && (
                 <div className="mt-2 max-h-80 overflow-y-auto hairline bg-surface-2 px-4 py-3">
                   <div className="whitespace-pre-wrap text-[11.5px] leading-relaxed text-ink-2">{c.texto}</div>
                   <p className="mt-2 text-[10px] leading-snug text-ink-3">Texto extraído del documento cargado.</p>

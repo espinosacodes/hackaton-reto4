@@ -43,6 +43,9 @@ export interface Contrato {
   fuente?: "ia" | "manual";
   // Texto del documento cargado (para ver/descargar el contrato real, no el representativo)
   texto?: string;
+  // Archivado en S3 del documento ORIGINAL subido (para descargarlo luego).
+  s3DocKey?: string; // clave del objeto en el bucket (separado por empresa)
+  s3DocNombre?: string; // nombre original del archivo (para la descarga)
 }
 
 // Señales de cómo se OPERA la relación (no juicios jurídicos: hechos verificables).

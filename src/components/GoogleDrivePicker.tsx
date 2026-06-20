@@ -219,7 +219,7 @@ export function GoogleDrivePicker({
             (no tienes que descargar nada ni copiar enlaces).
           </p>
           <Button variant="primary" onClick={conectar}>
-            <CloudConnection size={15} variant="Bold" /> Iniciar sesión con Google
+            <CloudConnection size={15} color="currentColor" variant="Bold" /> Iniciar sesión con Google
           </Button>
         </>
       ) : (

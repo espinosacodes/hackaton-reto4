@@ -522,7 +522,7 @@ function ModoApi() {
             <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="••••••••" className="ap-input" />
           </label>
           <Button variant="primary" onClick={consultar} disabled={cargando}>
-            <Flash size={15} variant="Bold" /> {cargando ? "Consultando…" : "Consultar planilla"}
+            <Flash size={15} color="currentColor" variant="Bold" /> {cargando ? "Consultando…" : "Consultar planilla"}
           </Button>
         </div>
       </Card>

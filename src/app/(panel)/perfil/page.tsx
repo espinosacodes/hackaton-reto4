@@ -209,7 +209,7 @@ function ParametrosSection() {
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <Button variant="primary" onClick={sugerir} disabled={cargandoSug}>
-            <Flash size={14} variant="Bold" /> {cargandoSug ? "Buscando…" : "Sugerir valores del año"}
+            <Flash size={14} color="currentColor" variant="Bold" /> {cargandoSug ? "Buscando…" : "Sugerir valores del año"}
           </Button>
           <Button variant="secondary" onClick={() => resetParametros()}>
             Restablecer 2026
@@ -348,7 +348,7 @@ function DocSlot({ tipo, desc, doc, onEliminar }: { tipo: string; desc: string; 
             {esRIT && (
               <div>
                 <Button variant="primary" onClick={auditar} disabled={auditando}>
-                  <Flash size={14} variant="Bold" /> {auditando ? "Auditando…" : "Auditar RIT con IA"}
+                  <Flash size={14} color="currentColor" variant="Bold" /> {auditando ? "Auditando…" : "Auditar RIT con IA"}
                 </Button>
                 {auditoria && !auditoria.error && (
                   <div className="mt-3 space-y-2">

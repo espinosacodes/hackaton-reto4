@@ -189,7 +189,7 @@ export function EvidenciaPanel({ caso }: { caso: CtxCaso }) {
           )}
 
           <Button variant="primary" onClick={analizar} disabled={cargando}>
-            <Flash size={15} variant="Bold" /> {cargando ? "Analizando prueba…" : "Analizar con IA"}
+            <Flash size={15} color="currentColor" variant="Bold" /> {cargando ? "Analizando prueba…" : "Analizar con IA"}
           </Button>
         </div>
       )}
